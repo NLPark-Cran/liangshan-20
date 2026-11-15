@@ -17,6 +17,7 @@
  */
 
 import { inkStroke, mulberry32, hexA } from './brush.js';
+import { ridgeLine } from './inkcurve.js';
 
 /* ────────────────────────── 剖面 ────────────────────────── */
 
@@ -84,6 +85,58 @@ export function profilePts(knots, vw, baseY, amp, n = 150) {
   return sampleProfile(knots, n).map(([t, h]) => [vw * t, baseY - h * amp]);
 }
 
+/**
+ * 一座峰的剖面。
+ *
+ * 峰顶不放在正中：tilt 让它偏一边，一侧坡长一侧坡短，
+ * 这是宋画主峰的样子（马远、夏圭的峰都是偏的）。
+ * 副峰用 sub 压低一点，接在主峰旁边。
+ */
+export function peakKnots(o = {}) {
+  const {
+    cx = 0.5,
+    half = 0.26,
+    h = 1,
+    tilt = 0,
+    leftShoulder = 0.66,
+    rightShoulder = 0.56,
+    sub = 0,
+    seed = 1,
+  } = o;
+  const rnd = mulberry32(seed);
+  const x0 = Math.max(0.001, cx - half);
+  const x1 = Math.min(0.999, cx + half);
+  const L = Math.max(0.015, cx - x0);
+  const R = Math.max(0.015, x1 - cx);
+  const sx = Math.min(x1 - R * 0.16, Math.max(x0 + L * 0.16, cx + tilt * half * 0.55));
+
+  const raw = [
+    [x0, 0],
+    [x0 + L * 0.24, h * leftShoulder * 0.14],
+    [x0 + L * 0.56, h * leftShoulder * 0.56],
+    [x0 + L * 0.84, h * leftShoulder * 0.9],
+    [sx - R * 0.12 - L * 0.1, h * (0.97 - sub * 0.06)],
+    [sx, h * (1 - sub * 0.12)],
+    [sx + R * 0.16, h * (0.82 - sub * 0.1)],
+    [x1 - R * 0.54, h * rightShoulder * 0.58],
+    [x1 - R * 0.24, h * rightShoulder * 0.2],
+    [x1, 0],
+  ];
+
+  // 排序、去重、保证 t 严格递增：剖面插值不能有重复节点
+  raw.sort((a, b) => a[0] - b[0]);
+  const knots = [];
+  let lastT = -1;
+  for (const [t0, hh] of raw) {
+    const t = Math.min(0.999, Math.max(0.001, t0));
+    if (t - lastT < 0.004) continue;
+    knots.push([t, Math.max(0, hh) * (0.97 + rnd() * 0.06)]);
+    lastT = t;
+  }
+  if (knots.length < 3) return [[x0, 0], [cx, h], [x1, 0]];
+  return knots;
+}
+
 /** 沿程浓淡：fade = [[t, factor], ...]，线性过渡 */
 function fadeAt(t, fade) {
   if (!fade || !fade.length) return 1;
@@ -145,7 +198,7 @@ export function mass(ctx, o = {}) {
   /* 只在 span 这一段里取点：山外的部分不该被填成一条横带 */
   const tA = span ? Math.max(0, span[0]) : 0;
   const tB = span ? Math.min(1, span[1]) : 1;
-  /* 剖面已是密点列时直接使用：再插值一次会把峰肩的转折磨圆 */
+  /* 剖面已经是密点列时直接用，不再插值（插值会把峰顶的转折圆掉） */
   const dense = knots.length > 60 ? knots : sampleProfile(knots, 420);
   const pts = [];
   for (const [t, hh] of dense) {
@@ -158,8 +211,8 @@ export function mass(ctx, o = {}) {
   const x0 = pts[0][0];
   const x1 = pts[pts.length - 1][0];
 
-  /** 山体轮廓（脊线 + 山脚）。两端各带一段斜翼，
-   *  免得脊线落到零高度时补出一条竖直硬边。 */
+  /** 山体轮廓（脊线 + 山脚），填色与裁剪共用。
+   *  两端各带一段斜翼，免得脊线落到零高度时画出一条竖直硬边。 */
   const tail = Math.max(10, amp * 0.28);
   const outlinePath = () => {
     ctx.beginPath();
@@ -182,7 +235,7 @@ export function mass(ctx, o = {}) {
   ctx.fill();
   ctx.restore();
 
-  /* 脊下一条窄带压深：脊重坡淡，块面才有分界 */
+  /* 脊下一条窄带压深：山脊重，坡面淡，这是块面的分界 */
   if (band > 0) {
     ctx.save();
     outlinePath();
@@ -216,7 +269,7 @@ export function mass(ctx, o = {}) {
     ctx.restore();
   }
 
-  /* 分脉：从峰脊拉下来的几道石纹，把整块山劈开 */
+  /* 分脉：从峰脊拉下来的几道石纹，把整块山劈成几块 */
   if (veins > 0) {
     let topI = 0;
     for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
@@ -228,8 +281,9 @@ export function mass(ctx, o = {}) {
       const depth = amp * veinDepth * (0.45 + rnd() * 0.75);
       const drift = side * amp * (0.12 + rnd() * 0.3);
       const path = [];
-      for (let i = 0; i <= 6; i++) {
-        const u = i / 6;
+      const n = 6;
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
         path.push([
           p0[0] + drift * u * u + (rnd() - 0.5) * 3,
           p0[1] + depth * u + (rnd() - 0.5) * 2,
@@ -250,8 +304,8 @@ export function mass(ctx, o = {}) {
     }
   }
 
-  /* 脊线：fade 按山自身这一段算（0 = 左端，1 = 右端）。
-   * 按整幅坐标算会错位：山只占画幅一段，查表出来的浓淡是另一段的。 */
+  /* 脊线：整条一次画完。
+     切段会在接缝处留下折点，峰顶正好落在接缝附近时会画出尖角。 */
   const taperL = tA > 0.004;
   const taperR = tB < 0.996;
   const endTaper = (u) => {
@@ -260,30 +314,28 @@ export function mass(ctx, o = {}) {
     if (taperR && u > 0.9) f *= 0.2 + 0.8 * ((1 - u) / 0.1);
     return Math.max(0.03, f);
   };
-  const segs = 24;
-  for (let k = 0; k < segs; k++) {
-    const i0 = Math.floor(((pts.length - 1) * k) / segs);
-    const i1 = Math.min(pts.length - 1, Math.floor(((pts.length - 1) * (k + 1)) / segs) + 2);
-    const u = (k + 0.5) / segs;
-    const f = fadeAt(u, fade);
-    const a = lineAlpha * f * endTaper(u);
-    if (a < 0.015) continue;
-    inkStroke(ctx, pts.slice(i0, i1 + 1), {
-      color: lineColor,
-      // 脊上最重，两端最轻：一笔的重量落在山脊上
-      width: lineWidth * (0.72 + 0.5 * f * endTaper(u)),
-      alpha: a,
-      seed: seed + k * 17,
-      wobble: Math.max(0.5, lineWidth * 0.55),
-      jitter: 0.25,
-      dry,
-      layers,
-      taper: false,
-      step: 4,
-    });
+  {
+    const edge = [];
+    const n = pts.length - 1;
+    for (let i = 0; i <= n; i++) {
+      const u = n ? i / n : 0;
+      const f = fadeAt(u, fade);
+      if (f * endTaper(u) > 0.05) edge.push(pts[i]);
+    }
+    if (edge.length > 2) {
+      // 用二次贝塞尔画，避免密集采样点连成折线在峰顶留下尖角
+      ridgeLine(ctx, edge, vw, {
+        color: lineColor,
+        width: lineWidth,
+        alpha: lineAlpha,
+        seed: seed + 7,
+        dry,
+        layers,
+      });
+    }
   }
 
-  /* 内轮廓：沿峰的两侧各压一道短脊，山才有厚度，不是一张剪影 */
+  /* 内轮廓：阴面一侧再压一道短脊线，山才有厚度，不是一张剪影 */
   if (inner > 0) {
     let topI = 0;
     for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
@@ -294,6 +346,7 @@ export function mass(ctx, o = {}) {
       for (let i = 0; i <= len; i += 3) {
         const idx = Math.max(0, Math.min(pts.length - 1, a0 + side * i));
         const p = pts[idx];
+        // 顺着坡往下偏一点，成一道内脊
         const drop = amp * inner * Math.sin((i / len) * Math.PI * 0.9);
         seg.push([p[0], p[1] + drop + 1]);
       }
@@ -313,31 +366,32 @@ export function mass(ctx, o = {}) {
     }
   }
 
-  /* 皴：从峰脊往下拉。沿脊线画会变成一串挂着的竖条，像滴水不像皴 */
+  /* 皴：从峰脊往下拉，沿坡面走，不沿脊线走。
+   * 沿脊线画会变成一串挂下来的竖条，像滴水不像皴。 */
   if (cun > 0) {
     let topI = 0;
     for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
     const groups = Math.max(1, Math.round(cun / 4));
     for (let gi = 0; gi < groups; gi++) {
       const u = 0.1 + (gi / groups) * 0.8 + (rnd() - 0.5) * 0.1;
-      const idx = Math.round(Math.min(1, Math.max(0, u)) * (pts.length - 1));
+      const idx = Math.round(u * (pts.length - 1));
       const p = pts[idx];
       const f = fadeAt(u, fade);
       if (f < 0.14) continue;
-      // 峰左往左拉，峰右往右拉
+      // 落笔点偏出峰的一侧：峰左往左拉，峰右往右拉
       const dirX = idx < topI ? -1 : 1;
       const cnt = Math.max(2, Math.round(cun / groups));
       for (let i = 0; i < cnt; i++) {
         const len = amp * cunLen * (0.5 + rnd() * 1.1);
-        const bx = p[0] + (rnd() - 0.5) * amp * 0.06;
-        const by = p[1] + amp * 0.015 + rnd() * amp * 0.04;
+        const x0c = p[0] + (rnd() - 0.5) * amp * 0.06;
+        const y0c = p[1] + amp * 0.015 + rnd() * amp * 0.04;
         const drift = dirX * len * (0.22 + rnd() * 0.3);
         inkStroke(
           ctx,
           [
-            [bx, by],
-            [bx + drift * 0.45 + (rnd() - 0.5) * 3, by + len * 0.5],
-            [bx + drift, by + len],
+            [x0c, y0c],
+            [x0c + drift * 0.45 + (rnd() - 0.5) * 3, y0c + len * 0.5],
+            [x0c + drift, y0c + len],
           ],
           {
             color: lineColor,
@@ -356,7 +410,7 @@ export function mass(ctx, o = {}) {
     }
   }
 
-  /* 苔点：压在脊线上，聚成两三丛，不沿脊撒胡椒 */
+  /* 苔点：压在脊线上，聚一丛最有神；fade 按山自身这一段算 */
   if (moss > 0) {
     const mt = 0.24 + rnd() * 0.4;
     for (let i = 0; i < moss; i++) {
@@ -365,6 +419,7 @@ export function mass(ctx, o = {}) {
       const p = pts[idx];
       const f = fadeAt(u, fade);
       if (f < 0.35) continue;
+      // 苔点聚成两三丛，不是沿脊撒胡椒
       const clump = 1 + Math.floor(rnd() * 3);
       for (let c = 0; c < clump; c++) {
         ctx.save();
@@ -385,9 +440,7 @@ export function mass(ctx, o = {}) {
     }
   }
 
-  /* 山脚化开：必须裁剪到山体自身。
-   * 原版直接 destination-out 横扫整幅，会把画下半部擦成一片死白，
-   * 这是之前「下半部大片空白」的直接原因。 */
+  /* 山脚化开：只擦山体自身，不能横扫整幅 */
   if (footFade > 0) {
     ctx.save();
     outlinePath();
@@ -398,7 +451,7 @@ export function mass(ctx, o = {}) {
     gg.addColorStop(0, `rgba(0,0,0,0)`);
     gg.addColorStop(1, `rgba(0,0,0,${footFade})`);
     ctx.fillStyle = gg;
-    ctx.fillRect(x0 - tail, yy, x1 - x0 + tail * 2, footY - yy);
+    ctx.fillRect(x0, yy, x1 - x0, footY - yy);
     ctx.restore();
   }
 }
@@ -420,52 +473,45 @@ export function ridge(w, y, amp, seed, peaks = 3, seg = 96) {
 }
 
 /**
- * 单峰剖面。
+ * 单峰的剖面：顶点可以不在正中，两坡不对称。
  *
- * 形状由两段接成：下段 k^p 山脚缓、越上越陡；上段一段收顶的弧到顶斜率归零。
- * 两段相接处那道折，就是宋画里的肩。
- *
- * 只要用整条正弦／抛物线，顶端斜率归零、斜率全程递减，
- * 出来一定是「面包」：没有峰脊的转折，也没有远近高差。
+ * 关键在上坡的形状：先缓、后陡，到顶有一个转折。
+ * 用正弦或抛物线做剖面，顶端斜率归零，出来一定是「面包」。
+ * 这里用 0.55k + 0.45k^2.4，越往上越陡，峰顶才立得住。
  */
 function peakHeight(t, pk) {
   const { cx, half, h = 1, tilt = 0 } = pk;
-  // crest 越大上坡越陡；旧参数 sharp 仍可用，映射过来
-  const crest = pk.crest != null ? pk.crest : 1.4 + ((pk.sharp ?? 1.2) - 1) * 2.2;
-  const p = 1.1 + crest * 0.42;
-  const kc = 0.86;
-  const vc = Math.pow(kc, p);
-
   const x0 = cx - half;
   const x1 = cx + half;
   if (t <= x0 || t >= x1) return 0;
-  const apex = Math.min(0.9, Math.max(0.1, 0.52 + tilt * 0.36));
+
+  const apex = Math.min(0.92, Math.max(0.08, 0.52 + tilt * 0.4));
   const u = (t - x0) / (x1 - x0);
+  const k = u <= apex ? u / apex : (1 - u) / (1 - apex);
 
-  let k;
-  let side;
-  if (u <= apex) {
-    k = u / apex;
-    side = 1;
-  } else {
-    k = (1 - u) / (1 - apex);
-    side = 0;
-  }
+  /* 峰顶必须圆。
+     之前用 (foot*k + (crest-foot)*k^crest)/crest，在 k=1 处导数是
+     (foot + crest*(crest-foot))/crest，crest=1.9 时等于 1.497，不收敛到 0，
+     所以顶点是一道折角，看起来就是尖的三角。
+     这里改成 1-(1-k)^p：k=1 时值取 1、导数必为 0，顶点天然圆。
+     p 越大越陡（脚缓顶平），p 越小越圆。 */
+  const sharp = pk.sharp ?? 1.25;
+  const rawP = pk.crest != null ? pk.crest : 1.3 + (sharp - 1) * 1.1;
+  const p = Math.min(3.2, Math.max(1.35, rawP));
+  let v = 1 - Math.pow(1 - k, p);
 
-  const v =
-    k <= kc ? Math.pow(k, p) : 1 - (1 - vc) * Math.pow((1 - k) / (1 - kc), 1.6);
-
-  // 两坡略不等，避免完全对称
-  const bias = side ? 1 : 0.93 + ((Math.abs(tilt) * 10) % 1) * 0.11;
-  return Math.max(0, Math.min(1, v * bias)) * h;
+  // 左右坡略不等，避免完全对称
+  const bias = u <= apex ? 1 : 0.95 + ((Math.abs(tilt) * 10) % 1) * 0.08;
+  v *= bias;
+  return Math.max(0, Math.min(1, v)) * h;
 }
 
 /**
  * 几座峰合成一道山脊：取包络，主峰压住次峰。
- * 峰间用一道很低的鞍部连起来，两端收到零，
- * 这样是一道连续的脊，不是几个分开的隆起。
+ * 峰与峰之间不直接落到零：低处用一道浅的鞍部接起来，
+ * 这样山脊是一道连续的脊，不是几个分开的包子。
  */
-export function composeRidge(peaks, n = 220) {
+export function composeRidge(peaks, n = 420) {
   let lo = 1;
   let hi = 0;
   for (const pk of peaks) {
@@ -483,27 +529,69 @@ export function composeRidge(peaks, n = 220) {
       const v = peakHeight(t, pk);
       if (v > hh) hh = v;
     }
-    const base = 0.085 * (0.55 + 0.28 * Math.sin(t * 9.1 + 1.7) + 0.14 * Math.sin(t * 21.3 + 0.4));
+    // 地基的起伏：几条低频正弦，幅度很小，只为把峰脚连起来
+    const base =
+      0.09 *
+      (0.55 + 0.28 * Math.sin(t * 9.1 + 1.7) + 0.14 * Math.sin(t * 21.3 + 0.4));
     hh = Math.max(hh, base);
-    // 两端收到零，山落在纸上而不是被一刀切断
-    const edge = Math.min(1, (t - lo) / 0.03, (hi - t) / 0.03);
+    // 两端收到零，山才落在纸上，而不是被一刀切断
+    const edge = Math.min(1, (t - lo) / 0.035, (hi - t) / 0.035);
     out.push([t, hh * Math.max(0, edge)]);
   }
-  return out;
+
+  /* 轻度平滑：只削峰顶的尖角，山脚和鞍部基本不动。
+     包络取 max 会在两峰交界处留下折点，平滑一次就圆了。 */
+  const sm = [];
+  const R = 3;
+  for (let i = 0; i <= n; i++) {
+    let sum = 0;
+    let wsum = 0;
+    for (let k = -R; k <= R; k++) {
+      const j = i + k;
+      if (j < 0 || j > n) continue;
+      const w = R + 1 - Math.abs(k);
+      sum += out[j][1] * w;
+      wsum += w;
+    }
+    sm.push([out[i][0], wsum ? sum / wsum : out[i][1]]);
+  }
+  return sm;
 }
 
 /**
- * 一道山脉。主峰 + 次峰，高差写进 peaks。
+ * 一道山脉。主峰 + 次峰，高差写进 peaks 里。
  * 场景只给峰的位置和高度，块面、脊线、皴、分脉由这里负责。
  */
 export function mountain(ctx, w, h, o = {}) {
+  /* 向后兼容：旧调用方用 ridgeY / y0 / 数字 peaks。
+     这些参数在 v1 里存在，v2 改成了 baseY / footY / 对象数组。
+     保留兼容层，避免每一个调用点都要改。 */
+  if (o.ridgeY !== undefined && o.baseY === undefined) {
+    o = { ...o, baseY: o.ridgeY };
+  }
+  if (o.y0 !== undefined && o.footY === undefined) {
+    o = { ...o, footY: o.y0 };
+  }
+  if (typeof o.peaks === 'number') {
+    // 数字 peaks 的意思是「大致几个峰」，转成等距的对象数组
+    const n = Math.max(1, Math.round(o.peaks));
+    o = {
+      ...o,
+      peaks: Array.from({ length: n }, (_, i) => ({
+        cx: (i + 0.5) / n,
+        half: 0.5 / n * 1.35,
+        h: 0.72 + ((i * 37) % 29) / 100,
+        tilt: ((i % 2) - 0.5) * 0.3,
+      })),
+    };
+  }
+
   const {
     seed = 1,
     baseY = h * 0.45,
     amp = h * 0.16,
     footY = h,
-    peaks: peakList = null,
-    peakCount = null,
+    peaks = null,
     tone = '#7c9160',
     toneAlpha = 0.16,
     lineColor = '#2b2f2b',
@@ -516,29 +604,18 @@ export function mountain(ctx, w, h, o = {}) {
     band = 0.12,
     veins = 2,
     moss = 0,
-    inner = 0,
     knots: givenKnots = null,
     span: givenSpan = null,
   } = o;
 
-  /* 兼容旧写法：peaks 传数字时按等分峰值自动生成；不传则给一道两峰的默认山 */
-  const list =
-    peakList ||
-    (typeof peakCount === 'number'
-      ? Array.from({ length: Math.max(2, Math.round(peakCount)) }, (_, i, arr) => ({
-          cx: (i + 0.55) / arr.length,
-          half: 0.16,
-          h: 0.55 + (i % 2 === 0 ? 0.45 : 0.1),
-          tilt: i % 2 === 0 ? 0.14 : -0.16,
-        }))
-      : [
-          { cx: 0.5, half: 0.3, h: 1, tilt: 0.1 },
-          { cx: 0.72, half: 0.16, h: 0.58, tilt: -0.2 },
-        ]);
+  const list = peaks || [
+    { cx: 0.5, half: 0.42, h: 1, tilt: 0.1 },
+    { cx: 0.78, half: 0.2, h: 0.55, tilt: -0.2 },
+  ];
 
-  const knots = givenKnots || composeRidge(list, 220);
+  const knots = givenKnots || composeRidge(list, 480);
 
-  /* 山只占它自己那一段：两端收在峰脚，山外留纸 */
+  /* 山只占它自己那一段：两端收在峰脚上，山外留纸 */
   let span = givenSpan;
   if (!span) {
     let t0 = 1;
@@ -566,16 +643,15 @@ export function mountain(ctx, w, h, o = {}) {
     layers: 1,
     fade,
     cun: texture * 5,
-    cunLen: 0.24,
+    cunLen: 0.26,
     cunAlpha: 0.34,
-    moss: moss || Math.max(0, Math.round(texture * 1.8)),
+    moss: moss || Math.max(0, Math.round(texture * 1.6)),
     seed,
     footFade,
     shade,
     band,
     veins,
     veinDepth: 0.5,
-    inner,
   });
 }
 
@@ -626,7 +702,7 @@ function ribbon(ctx, pts, w0, w1, o = {}) {
   }
 }
 
-/** 一片叶：尖头的小笔，起于 (x,y) 朝 ang 伸出。不是圆球 */
+/** 一片叶：尖头的小点，不是圆球。起于 (x,y)，朝 ang 伸出 len */
 function leafDab(ctx, x, y, ang, len, wid) {
   const c = Math.cos(ang);
   const s = Math.sin(ang);
@@ -638,17 +714,17 @@ function leafDab(ctx, x, y, ang, len, wid) {
 }
 
 /** 一丛叶：从一点朝一个扇面散出几片，个字点／介字点的意思 */
-function leafFan(px, py, dir, spread, n, len, rnd, out) {
+function leafFan(ctx, px, py, dir, spread, n, len, rnd, out) {
   for (let i = 0; i < n; i++) {
     const k = n === 1 ? 0.5 : i / (n - 1);
-    const ang = dir + (k - 0.5) * spread + (rnd() - 0.5) * 0.24;
+    const ang = dir + (k - 0.5) * spread + (rnd() - 0.5) * 0.22;
     const ll = len * (0.6 + rnd() * 0.75);
     out.push({
       x: px + (rnd() - 0.5) * len * 0.5,
       y: py + (rnd() - 0.5) * len * 0.35,
       ang,
       len: ll,
-      wid: ll * (0.15 + rnd() * 0.1),
+      wid: ll * (0.16 + rnd() * 0.1),
       a: 0.35 + rnd() * 0.65,
     });
   }
@@ -667,8 +743,11 @@ function leafDots(ctx, dots, color, baseAlpha) {
     ctx.save();
     ctx.beginPath();
     for (const d of buckets[b]) {
-      if (d.len) leafDab(ctx, d.x, d.y, d.ang, d.len, d.wid);
-      else ctx.ellipse(d.x, d.y, d.rx, d.ry, d.ang, 0, Math.PI * 2);
+      if (d.len) {
+        leafDab(ctx, d.x, d.y, d.ang, d.len, d.wid);
+      } else {
+        ctx.ellipse(d.x, d.y, d.rx, d.ry, d.ang, 0, Math.PI * 2);
+      }
     }
     ctx.fillStyle = hexA(color, baseAlpha * (0.6 + b * 0.22));
     ctx.fill();
@@ -677,10 +756,10 @@ function leafDots(ctx, dots, color, baseAlpha) {
 }
 
 /**
- * 一丛树。
+ * 一丛树：树干不齐，冠分主次，疏密不均。
  *
- * 场景只给落点，丛内怎么长由这里决定：主树最大，往两侧递减，
- * 冠可以互相压住。这样是一片林，不是一排等距的杆子。
+ * trees 是手写的几处落点（画面要能控制哪里有树、哪里空），
+ * 每处再按 count 长出一小丛，丛内靠近主树，往边缘变稀。
  */
 export function treeGroup(ctx, o = {}) {
   const {
@@ -701,9 +780,9 @@ export function treeGroup(ctx, o = {}) {
   for (let i = 0; i < count; i++) {
     const k = count === 1 ? 0 : i / (count - 1);
     // 主树最大，往两侧递减，且不排成等距
-    const fall = k === 0 ? 1 : 1 - Math.abs(k - 0.5) * 0.55 - (i % 2) * 0.1;
+    const fall = k === 0 ? 1 : 1 - Math.abs(k - 0.5) * 0.5 - (i % 2) * 0.12;
     const ss = size * (0.55 + 0.55 * fall) * (0.85 + rnd() * 0.3);
-    // 丛宽以树高为单位，允许冠与冠互相压住
+    // 丛宽以树高为单位，允许冠与冠互相压住，这样才像一丛而不是一排
     const ox = (k - 0.5) * size * spread * 1.7 + (rnd() - 0.5) * size * 0.2;
     const oy = (rnd() - 0.5) * size * 0.1 + baseAngle * ox;
     treeShape(ctx, x + ox, y + oy, {
@@ -713,7 +792,7 @@ export function treeGroup(ctx, o = {}) {
       alpha: alpha * (0.82 + rnd() * 0.3),
       canopy,
       canopyAlpha: canopyAlpha * (0.8 + rnd() * 0.4),
-      shape: shape === 'mixed' ? (rnd() > 0.72 ? 'pine' : 'round') : shape,
+      shape: shape === 'mixed' ? (rnd() > 0.7 ? 'pine' : 'round') : shape,
       trunkRatio: 0.5 + rnd() * 0.18,
       flip: rnd() > 0.5 ? 1 : -1,
     });
@@ -927,7 +1006,7 @@ export function treeShape(ctx, x, y, o = {}) {
 
   const dots = [];
   /**
-   * 叶落在枝上：沿枝走，靠枝端密、靠枝根疏，
+   * 一簇叶落在枝上：沿枝走，靠枝端密、靠枝根疏，
    * 叶朝外张开，中间留缝，不做成一团棉花。
    */
   const alongBranch = (from, to, n, dirBias, leafLen, spreadW) => {
@@ -937,35 +1016,22 @@ export function treeShape(ctx, x, y, o = {}) {
       const py = from[1] + (to[1] - from[1]) * u;
       const side = rnd() > 0.5 ? 1 : -1;
       const dir = -Math.PI / 2 + side * (0.5 + rnd() * 0.75) + dirBias;
-      leafFan(
-        px + (rnd() - 0.5) * spreadW,
-        py + (rnd() - 0.5) * spreadW * 0.55,
-        dir,
-        1.15,
-        2 + Math.floor(rnd() * 2),
-        leafLen,
-        rnd,
-        dots
-      );
+      const gx = px + (rnd() - 0.5) * spreadW;
+      const gy = py + (rnd() - 0.5) * spreadW * 0.55;
+      leafFan(ctx, gx, gy, dir, 1.15, 2 + Math.floor(rnd() * 2), leafLen, rnd, dots);
     }
   };
 
   for (const br of branches) {
-    alongBranch(
-      [br.mid[0] * 0.35 + br.tip[0] * 0.65, br.mid[1] * 0.35 + br.tip[1] * 0.65],
-      br.tip,
-      s > 55 ? 5 : 4,
-      -0.25 * br.side,
-      s * 0.085,
-      s * 0.055
-    );
+    // 从枝根到枝梢，叶越往梢越密
+    alongBranch([br.mid[0] * 0.35 + br.tip[0] * 0.65, br.mid[1] * 0.35 + br.tip[1] * 0.65], br.tip, s > 55 ? 5 : 4, -0.25 * br.side, s * 0.085, s * 0.055);
     alongBranch(br.mid, br.tip, s > 55 ? 3 : 2, 0.2 * br.side, s * 0.07, s * 0.05);
   }
-  // 冠顶叶最密，压住整棵树的轮廓
-  leafFan(top[0], top[1] - s * 0.02, -Math.PI / 2, 1.7, s > 55 ? 7 : 5, s * 0.1, rnd, dots);
-  leafFan(top[0] + s * 0.03, top[1] + s * 0.05, -Math.PI / 2 + 0.5, 1.5, 4, s * 0.08, rnd, dots);
-  // 干身中段一小丛，冠才不悬空
-  leafFan(x + leanX * 0.45, y - H * 0.48, -Math.PI / 2 - 0.9, 1.2, 3, s * 0.075, rnd, dots);
+  // 冠顶：叶最密的一处，压住整棵树的轮廓
+  leafFan(ctx, top[0], top[1] - s * 0.02, -Math.PI / 2, 1.7, s > 55 ? 7 : 5, s * 0.1, rnd, dots);
+  leafFan(ctx, top[0] + s * 0.03, top[1] + s * 0.05, -Math.PI / 2 + 0.5, 1.5, 4, s * 0.08, rnd, dots);
+  // 干身中段一小丛，让冠不是「悬空的伞」
+  leafFan(ctx, x + leanX * 0.45, y - H * 0.48, -Math.PI / 2 - 0.9, 1.2, 3, s * 0.075, rnd, dots);
 
   leafDots(ctx, dots, leafColor, leafA);
 }
@@ -1041,6 +1107,9 @@ function bambooClump(ctx, x, y, o) {
 /**
  * 雾：擦掉墨，不画白。
  * 多个低强度、椭圆、羽化极大的渐变叠加，接缝不可见。
+ *
+ * strength 是「擦掉多少」，不是「多白」。单块雾超过 0.6 就会在纸上
+ * 留下一道横扫的硬白带，所以每块的上限压得比较低，靠块数叠出来。
  */
 export function mist(ctx, o = {}) {
   const { x = 0, y = 0, w = 400, h = 80, seed = 7, strength = 0.9, blobs = 5, tilt = 0 } = o;
@@ -1052,8 +1121,7 @@ export function mist(ctx, o = {}) {
     const cy = y + (rnd() - 0.5) * h * 0.55;
     const rx = w * (0.2 + rnd() * 0.3);
     const ry = h * (0.5 + rnd() * 0.75);
-    // 单块上限压住：一块擦掉六成以上，纸上就是一道横扫的硬白带
-    const st = Math.min(0.32, strength * (0.15 + rnd() * 0.15));
+    const st = Math.min(0.34, strength * (0.16 + rnd() * 0.16));
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(tilt * (rnd() - 0.5));
@@ -1162,9 +1230,9 @@ export function bankLine(ctx, o = {}) {
 /**
  * 一间屋。
  *
- * 浙北民居：屋顶长、两头起翘，出檐压住墙，墙脚一道横线。
- * 屋顶是一笔带弧的线，不是三角形；墙只留一条腿，不封口，
- * 一片房子叠在一起才不会变成一堆小方块。
+ * 浙北民居的样子：屋顶长、两头起翘，出檐压住墙，墙脚有一道横线。
+ * 屋顶是一笔带弧的线，不是三角形；墙是淡墨块，不勾满框，
+ * 这样一片房子叠在一起也不会变成一堆线框。
  */
 export function hut(ctx, x, y, o = {}) {
   const {
@@ -1179,13 +1247,15 @@ export function hut(ctx, x, y, o = {}) {
   } = o;
   const s = size;
   const d = flip ? -1 : 1;
+  const eaveL = x - s * 0.66 * d;
+  const eaveR = x + s * 0.66 * d;
 
   /* 墙：淡墨一块，先铺，屋顶压在上面 */
   if (tone) {
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(x - s * 0.36 * d, y - s * 0.04);
-    ctx.lineTo(x + s * 0.36 * d, y - s * 0.04);
+    ctx.moveTo(x - s * 0.36 * d, y - s * 0.05);
+    ctx.lineTo(x + s * 0.36 * d, y - s * 0.05);
     ctx.lineTo(x + s * 0.36 * d, y + s * wall);
     ctx.lineTo(x - s * 0.36 * d, y + s * wall);
     ctx.closePath();
@@ -1194,16 +1264,16 @@ export function hut(ctx, x, y, o = {}) {
     ctx.restore();
   }
 
-  /* 屋顶：一道长弧，中间略塌，两端起翘 */
+  /* 屋顶：一道长弧，中间略塌，两端翘起 */
   inkStroke(
     ctx,
     [
-      [x - s * 0.66 * d, y - s * 0.03],
+      [eaveL, y - s * 0.03],
       [x - s * 0.42 * d, y - s * 0.3],
       [x - s * 0.16 * d, y - s * 0.46],
       [x + s * 0.14 * d, y - s * 0.47],
       [x + s * 0.42 * d, y - s * 0.32],
-      [x + s * 0.66 * d, y - s * 0.05],
+      [eaveR, y - s * 0.05],
     ],
     {
       color,
@@ -1237,7 +1307,7 @@ export function hut(ctx, x, y, o = {}) {
     }
   );
 
-  /* 墙脚：屋才坐在地上，不是浮着 */
+  /* 墙脚：一道横线，屋才坐在地上而不是浮着 */
   inkStroke(
     ctx,
     [
@@ -1256,7 +1326,7 @@ export function hut(ctx, x, y, o = {}) {
     }
   );
 
-  /* 一条墙腿，不必四面封口 */
+  /* 两端的墙线：只画一条腿，不必四面封口 */
   inkStroke(
     ctx,
     [
@@ -1275,7 +1345,7 @@ export function hut(ctx, x, y, o = {}) {
     }
   );
 
-  /* 门：一条竖笔，不画成框 */
+  /* 门：一条竖笔，不必画成框 */
   inkStroke(
     ctx,
     [

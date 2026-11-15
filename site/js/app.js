@@ -60,6 +60,11 @@ async function init() {
   buildScroll();
 
   setTimeout(() => document.getElementById('boot')?.classList.add('is-done'), 380);
+
+  // 首屏背景在布局稳定后补一次重绘，避免首帧拿到 0 尺寸
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => drawHeroArt());
+  });
 }
 
 /** 登录态变化时，把已经开着的面板同步一下 */
@@ -136,9 +141,13 @@ function drawHeroArt() {
   const cv = document.getElementById('hero-bg');
   if (!cv) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // 首帧时 hero 可能还没完成布局，getBoundingClientRect 会拿到 0，
+  // 于是掉进 320 的兜底值，轴比就错了。优先取父容器尺寸。
+  const parent = cv.parentElement;
   const rect = cv.getBoundingClientRect();
-  const w = Math.max(rect.width, 320);
-  const h = Math.max(rect.height, 320);
+  const prect = parent ? parent.getBoundingClientRect() : rect;
+  const w = Math.max(rect.width, prect.width, 320);
+  const h = Math.max(rect.height, prect.height, 320);
   cv.width = Math.round(w * dpr);
   cv.height = Math.round(h * dpr);
   const ctx = cv.getContext('2d');
@@ -380,12 +389,14 @@ function drawPanel(panel, total, index) {
     ctx.fillStyle = '#f4efe4';
     ctx.fillRect(0, 0, w, h);
     paintScene(ctx, panel.point.scene, w, h, (panel.index + 3) * 977 + 1001);
-    // 右侧留白渐隐，让文字不压画面
-    const g = ctx.createLinearGradient(w * 0.4, 0, w, 0);
+    // 右侧留白渐隐，让文字不压画面。
+    // 起点定在 0.58：太靠左会把画面大半盖住，构图展不开。
+    const g = ctx.createLinearGradient(w * 0.58, 0, w, 0);
     g.addColorStop(0, 'rgba(244,239,228,0)');
-    g.addColorStop(1, 'rgba(244,239,228,0.9)');
+    g.addColorStop(0.62, 'rgba(244,239,228,0.55)');
+    g.addColorStop(1, 'rgba(244,239,228,0.92)');
     ctx.fillStyle = g;
-    ctx.fillRect(w * 0.4, 0, w * 0.6, h);
+    ctx.fillRect(w * 0.58, 0, w * 0.42, h);
   } else {
     drawTailPanel(ctx, w, h);
   }

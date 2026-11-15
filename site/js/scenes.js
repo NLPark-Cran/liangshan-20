@@ -4,14 +4,14 @@
  * 构图按南宋山水的办法来：
  *
  *   1. 一角实、其余虚。全幅重心压在左边，右边交给纸和字。
- *      app.js 在 w*0.4 之后盖一层纸色渐隐，右侧的墨本来就该淡；
+ *      app.js 会在 w*0.4 之后盖一层纸色渐隐，所以右侧的墨本来就该淡，
  *      构图不能把主景放到那里去。
  *   2. 主峰与次峰有高差。峰的位置和高度写进 peaks，不靠随机起伏。
  *   3. 一景只有一个重心。其余元素只做陪衬，压住画面下缘，不留死白。
  *   4. 树的疏密由落点决定。哪里成丛、哪里空着，是构图的一部分。
  *
  * 每个场景都在「虚拟画布」里绘制（纵向固定 700 单位），
- * 横向按实际宽高比推算，所以屏幕多大都保持同样的比例关系。
+ * 横向按实际宽高比推算，屏幕多大都保持同样的比例关系。
  */
 
 import { inkStroke, rockCluster, pit, mulberry32, hexA } from './brush.js';
@@ -53,7 +53,7 @@ function inVirtual(ctx, w, h, fn, seed, gainMul = 1) {
 
 /* ────────────────────────── 通用零件 ────────────────────────── */
 
-/** 一道山脊线：分段上色。fadeT 给每个点的相对 t，浓淡才不会错位 */
+/** 一道山脊线：分段上色，靠 fade 化进纸里。fadeT 是每个点的全局 t（可选） */
 function ridgeLine(ctx, pts, o = {}) {
   if (!pts || pts.length < 2) return;
   const {
@@ -71,6 +71,7 @@ function ridgeLine(ctx, pts, o = {}) {
   for (let k = 0; k < segs; k++) {
     const i0 = Math.floor(((pts.length - 1) * k) / segs);
     const i1 = Math.min(pts.length - 1, Math.ceil(((pts.length - 1) * (k + 1)) / segs) + 1);
+    // 浓淡要按整幅的 t 算：远山只占画幅一段，不能拿段内比例去查表
     const mid = Math.round((i0 + i1) / 2);
     const g = fadeT ? fadeT[Math.min(mid, fadeT.length - 1)] : (k + 0.5) / segs;
     const a = alpha * fadeAt(g, fade);
@@ -109,13 +110,11 @@ function farRange(ctx, w, h, o = {}) {
   const lo = Math.max(0, t0);
   const hi = Math.min(1, t1);
   const band = composeRidge(peaks, 300).filter(([t]) => t >= lo - 1e-4 && t <= hi + 1e-4);
-
   const pts = [];
   const fadeT = [];
   for (const [t, hh] of band) {
     pts.push([w * t, h * baseY - hh * h * amp]);
-    // 按山自身这一段归一，浓淡才落在两端
-    fadeT.push(hi > lo ? (t - lo) / (hi - lo) : 0);
+    fadeT.push(t);
   }
   ridgeLine(ctx, pts, { color: '#6c736a', alpha, width: 1.05, seed, fade, fadeT, dry: 0 });
 }
@@ -202,7 +201,7 @@ function terraceFan(ctx, o = {}) {
       step: 4,
     });
 
-    // 近处几层田埂的积水：短横笔，不排成条
+    // 近处几层田埂上的积水：短横笔，不排成条
     if (t > 0.5 && rnd() > 0.45) {
       const sx = cxr - half * (0.15 + rnd() * 0.55);
       const sw = half * (0.16 + rnd() * 0.3);
@@ -311,220 +310,173 @@ function cornerTree(ctx, w, h, o = {}) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   一 · 余村：左边是被炸开的赭石山，右边是复绿的山
+   一 · 钱江源：远山叠着，林带压住山脚，前景一潭
    ══════════════════════════════════════════════════════════ */
 
-export function sceneYucun(ctx, w, h, seed = 1001) {
-  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.07, from: 0, to: 0.38 });
+export function sceneQianjiangyuan(ctx, w, h, seed = 3001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.09, from: 0, to: 0.42 });
 
+  /* 远：三层淡线，越远越薄，最外一层只用线不落墨 */
   farRange(ctx, w, h, {
-    baseY: 0.16,
+    baseY: 0.15,
     amp: 0.045,
     alpha: 0.16,
     seed: seed + 11,
     peaks: [
-      { cx: 0.1, half: 0.2, h: 1, tilt: 0.2, sharp: 1.45 },
-      { cx: 0.32, half: 0.18, h: 0.66, tilt: -0.14, sharp: 1.35 },
-      { cx: 0.5, half: 0.2, h: 0.4, tilt: 0.1, sharp: 1.2 },
+      { cx: 0.06, half: 0.16, h: 1, tilt: 0.34, sharp: 1.6 },
+      { cx: 0.24, half: 0.18, h: 0.72, tilt: -0.2, sharp: 1.5 },
+      { cx: 0.44, half: 0.2, h: 0.44, tilt: 0.14, sharp: 1.35 },
     ],
-    fade: [[0, 1], [0.7, 0.5], [1, 0]],
+    fade: [[0, 0.9], [0.7, 0.6], [1, 0]],
+  });
+  farRange(ctx, w, h, {
+    baseY: 0.235,
+    amp: 0.07,
+    alpha: 0.26,
+    seed: seed + 17,
+    peaks: [
+      { cx: 0.09, half: 0.17, h: 1, tilt: 0.3, sharp: 1.4 },
+      { cx: 0.27, half: 0.15, h: 0.6, tilt: -0.22, sharp: 1.35 },
+      { cx: 0.46, half: 0.18, h: 0.34, tilt: 0.12, sharp: 1.25 },
+    ],
+    fade: [[0, 1], [0.65, 0.55], [1, 0]],
   });
 
-  /* 右：复绿的山。先画，让左边的矿山压在前面。
-   * 峰位收在 0.52 以内：app.js 从 w*0.4 起盖纸色渐隐。
-   * 这一幅的对照全在左半幅，矿 0.03-0.27，绿 0.18-0.52。 */
+  /* 主山：主峰站在左边，次峰矮下去，右端整段化进纸 */
   mountain(ctx, w, h, {
     seed: seed + 21,
-    baseY: h * 0.44,
-    amp: h * 0.185,
-    footY: h * 0.7,
-    tone: '#7c9160',
-    toneAlpha: 0.17,
+    baseY: h * 0.45,
+    amp: h * 0.27,
+    footY: h * 0.63,
+    tone: '#4d5c3d',
+    toneAlpha: 0.19,
     lineColor: '#2b2f2b',
-    lineAlpha: 0.36,
-    lineWidth: 1.8,
-    texture: 2.4,
+    lineAlpha: 0.46,
+    lineWidth: 2,
+    texture: 3.4,
     peaks: [
-      { cx: 0.315, half: 0.14, h: 1, tilt: -0.08, crest: 1.9 },
-      { cx: 0.44, half: 0.115, h: 0.64, tilt: 0.14, crest: 1.7 },
+      { cx: 0.1, half: 0.17, h: 1, tilt: 0.26, crest: 2.4, foot: 0.85 },
+      { cx: 0.265, half: 0.13, h: 0.6, tilt: -0.24, crest: 2.1, foot: 0.9 },
+      { cx: 0.385, half: 0.11, h: 0.36, tilt: 0.16, crest: 1.8, foot: 1.0 },
     ],
-    fade: [[0, 0.12], [0.22, 0.95], [0.62, 0.6], [1, 0.08]],
+    fade: [[0, 1], [0.5, 0.88], [0.85, 0.32], [1, 0.05]],
+    shade: [-0.02, 0.14, 0.1],
     footFade: 0.55,
-    veins: 2,
-    moss: 7,
-    inner: 0.08,
+    veins: 3,
+    moss: 10,
   });
 
-  /* 左：赭石矿山。剖面里一段直线，是宕口被切平的台阶 */
-  const mineKnots = [
-    [0.004, 0.02],
-    [0.032, 0.36],
-    [0.06, 0.7],
-    [0.088, 0.95],
-    [0.115, 0.76],
-    [0.152, 0.72, 'lin'],
-    [0.19, 0.7],
-    [0.219, 0.42],
-    [0.245, 0.15],
-    [0.265, 0.02],
-  ];
-  mass(ctx, {
-    vw: w,
-    baseY: h * 0.435,
-    amp: h * 0.245,
-    knots: mineKnots,
-    span: [0.004, 0.265],
-    footY: h * 0.86,
-    tone: '#b1813f',
-    toneAlpha: 0.22,
-    lineColor: '#5c4526',
-    lineAlpha: 0.54,
-    lineWidth: 2.2,
-    dry: 0.22,
-    layers: 1,
-    cun: 12,
-    cunLen: 0.15,
-    cunAlpha: 0.42,
-    moss: 5,
-    seed: seed + 31,
-    footFade: 0.3,
-    band: 0.06,
-  });
+  /* 山脚雾，把山与林带分开 */
+  mist(ctx, { x: -w * 0.05, y: h * 0.5, w: w * 0.6, h: h * 0.09, seed: seed + 31, strength: 0.85, blobs: 5 });
 
-  /* 宕口：阶梯环 + 坑底 */
-  pit(ctx, w * 0.135, h * 0.63, {
-    r: w * 0.05,
-    depth: 1,
-    seed: seed + 41,
-    alpha: 0.55,
-    color: '#8a6733',
-  });
-
-  /* 切面上几道炮孔痕：竖着拉下来，长短不一 */
-  for (let i = 0; i < 5; i++) {
-    const x = w * (0.108 + i * 0.016 + ((i * 17) % 5) * 0.002);
-    inkStroke(
-      ctx,
-      [
-        [x, h * (0.5 + ((i * 13) % 7) * 0.006)],
-        [x + 1.2, h * 0.575],
-      ],
-      {
-        color: '#5c4526',
-        width: 0.9,
-        alpha: 0.24,
-        seed: seed + 500 + i,
-        wobble: 0.3,
-        dry: 0.34,
-        layers: 1,
-        taper: false,
-      }
-    );
-  }
-
-  rockCluster(ctx, w * 0.05, h * 0.79, { w: w * 0.06, h: h * 0.026, seed: seed + 47, alpha: 0.34 });
-  rockCluster(ctx, w * 0.21, h * 0.805, { w: w * 0.05, h: h * 0.021, seed: seed + 49, alpha: 0.26 });
-
-  /* 山谷里的雾，把两座山分开 */
-  mist(ctx, { x: w * 0.14, y: h * 0.6, w: w * 0.42, h: h * 0.1, seed: seed + 51, strength: 0.9, blobs: 4 });
-
-  /* 右坡的树：只长在复绿的那一面 */
+  /* 中景林：左密右疏，最右一丛只剩个影子 */
   treeGroup(ctx, {
-    x: w * 0.33,
-    y: h * 0.625,
-    size: 56,
-    count: 4,
-    spread: 0.7,
-    seed: seed + 601,
+    x: w * 0.05,
+    y: h * 0.575,
+    size: 58,
+    count: 3,
+    spread: 0.6,
+    seed: seed + 101,
     color: '#2f3a29',
-    alpha: 0.4,
+    alpha: 0.44,
     canopy: '#44523a',
-    canopyAlpha: 0.14,
+    canopyAlpha: 0.15,
     shape: 'mixed',
   });
   treeGroup(ctx, {
-    x: w * 0.45,
-    y: h * 0.655,
-    size: 44,
+    x: w * 0.16,
+    y: h * 0.59,
+    size: 74,
+    count: 4,
+    spread: 0.7,
+    seed: seed + 117,
+    color: '#2b3526',
+    alpha: 0.5,
+    canopy: '#3f4d36',
+    canopyAlpha: 0.17,
+    shape: 'mixed',
+  });
+  treeGroup(ctx, {
+    x: w * 0.3,
+    y: h * 0.605,
+    size: 50,
+    count: 2,
+    spread: 0.6,
+    seed: seed + 131,
+    color: '#37432f',
+    alpha: 0.32,
+    canopy: '#4a5840',
+    canopyAlpha: 0.1,
+  });
+  treeGroup(ctx, {
+    x: w * 0.4,
+    y: h * 0.62,
+    size: 38,
     count: 2,
     spread: 0.5,
-    seed: seed + 619,
-    color: '#3a4632',
-    alpha: 0.24,
-    canopyAlpha: 0.08,
+    seed: seed + 149,
+    color: '#4a544a',
+    alpha: 0.18,
+    canopyAlpha: 0.07,
   });
 
-  /* 谷底：一条淡染的地面，压住右侧 */
-  const floorTop = softEdge(-w * 0.02, w * 0.7, h * 0.795, h * 0.012, seed + 61, 28);
-  washArea(
-    ctx,
-    floorTop.concat([
-      [w * 0.7, h * 1.02],
-      [-w * 0.02, h * 1.02],
-    ]),
-    { color: '#7c9160', a0: 0.03, a1: 0.13, yTop: h * 0.79, yBot: h }
-  );
-
-  houseRow(ctx, {
-    seed: seed + 700,
-    alpha: 0.48,
-    list: [
-      [w * 0.3, h * 0.848, 30, 0],
-      [w * 0.365, h * 0.875, 26, 1],
-      [w * 0.425, h * 0.905, 22, 0],
-    ],
-  });
-
-  /* 塘：右下的一小块水，让地面不是白板 */
-  const pond = softEdge(w * 0.36, w * 0.66, h * 0.93, h * 0.007, seed + 71, 20);
-  washArea(
-    ctx,
-    pond.concat([
-      [w * 0.66, h * 1.02],
-      [w * 0.36, h * 1.02],
-    ]),
-    { color: '#6d8f8a', a0: 0.1, a1: 0.16, yTop: h * 0.93, yBot: h }
-  );
-  water(ctx, w * 0.32, h * 0.94, h * 0.99, { seed: seed + 73, rows: 2, alpha: 0.2, x0: 0.38, x1: 0.64 });
-
-  /* 山道：从村里往左上走，接上矿山的脚 */
+  /* 源头细流，从雾里下到潭 */
   inkStroke(
     ctx,
     [
-      [w * 0.36, h * 0.972],
-      [w * 0.315, h * 0.925],
-      [w * 0.28, h * 0.878],
-      [w * 0.252, h * 0.845],
+      [w * 0.2, h * 0.5],
+      [w * 0.216, h * 0.56],
+      [w * 0.205, h * 0.625],
+      [w * 0.228, h * 0.69],
+      [w * 0.222, h * 0.75],
     ],
-    { color: '#8d948a', width: 1.2, alpha: 0.28, seed: seed + 81, dry: 0.34, layers: 1, taper: false }
+    { color: '#6d8f8a', width: 1.5, alpha: 0.42, seed: seed + 41, dry: 0.24, layers: 2, taper: false }
   );
 
-  /* 前景：左角竹丛，压住矿山的脚 */
+  /* 前景潭：左重右轻，水面铺在视线下方 */
+  const poolTop = softEdge(-w * 0.02, w * 0.82, h * 0.755, h * 0.016, seed + 51, 30);
+  washArea(
+    ctx,
+    poolTop.concat([
+      [w * 0.82, h * 1.02],
+      [-w * 0.02, h * 1.02],
+    ]),
+    { color: '#6d8f8a', a0: 0.03, a1: 0.17, yTop: h * 0.74, yBot: h }
+  );
+  water(ctx, w * 0.78, h * 0.79, h * 0.99, { seed: seed + 61, rows: 5, alpha: 0.26, x0: 0.04, x1: 0.72 });
+
+  /* 岸边石，压住潭的上缘 */
+  stone(ctx, w * 0.15, h * 0.772, { w: w * 0.075, h: h * 0.026, seed: seed + 71, alpha: 0.4, moss: 4 });
+  stone(ctx, w * 0.225, h * 0.79, { w: w * 0.05, h: h * 0.017, seed: seed + 73, alpha: 0.3, moss: 2 });
+  rockCluster(ctx, w * 0.36, h * 0.8, { w: w * 0.05, h: h * 0.018, seed: seed + 77, alpha: 0.2 });
+
+  /* 前景两棵树：左边这一角就是全幅的重心 */
+  cornerTree(ctx, w, h, { x: 0.035, y: 1.0, size: 176, seed: seed + 901 });
   cornerTree(ctx, w, h, {
-    x: 0.03,
-    y: 1.02,
-    size: 150,
-    seed: seed + 801,
-    color: '#26301f',
-    alpha: 0.46,
-    canopyAlpha: 0.18,
-    shape: 'bamboo',
-  });
-  cornerTree(ctx, w, h, {
-    x: 0.085,
-    y: 1.06,
+    x: 0.135,
+    y: 1.03,
     size: 116,
-    seed: seed + 807,
-    color: '#2b3526',
-    alpha: 0.3,
-    canopyAlpha: 0.13,
-    lean: 0.14,
-    shape: 'bamboo',
+    seed: seed + 907,
+    color: '#26301f',
+    alpha: 0.36,
+    canopyAlpha: 0.15,
+    lean: -0.12,
   });
+
+  /* 一只鸟，落在右上那片空里 */
+  inkStroke(
+    ctx,
+    [
+      [w * 0.5, h * 0.14],
+      [w * 0.516, h * 0.122],
+      [w * 0.534, h * 0.14],
+    ],
+    { color: '#2b2f2b', width: 1, alpha: 0.32, seed: seed + 81, layers: 1, dry: 0, taper: false }
+  );
 }
 
 /* ══════════════════════════════════════════════════════════
-   二 · 下姜村：一条溪穿过村子
+   二 · 下姜村：溪从左上山间下来，两岸散着民居
    ══════════════════════════════════════════════════════════ */
 
 export function sceneXiajiang(ctx, w, h, seed = 2001) {
@@ -556,15 +508,14 @@ export function sceneXiajiang(ctx, w, h, seed = 2001) {
     lineWidth: 2,
     texture: 3,
     peaks: [
-      { cx: 0.07, half: 0.16, h: 1, tilt: 0.3, crest: 2.4 },
-      { cx: 0.215, half: 0.115, h: 0.55, tilt: -0.2, crest: 1.9 },
+      { cx: 0.07, half: 0.16, h: 1, tilt: 0.36, sharp: 1.28 },
+      { cx: 0.215, half: 0.115, h: 0.55, tilt: -0.22, sharp: 1.18 },
     ],
     fade: [[0, 1], [0.45, 0.9], [0.8, 0.34], [1, 0.05]],
     shade: [-0.03, 0.1, 0.1],
-    footFade: 0.55,
+    footFade: 0.6,
     veins: 2,
     moss: 8,
-    inner: 0.1,
   });
 
   /* 右边一座矮山，只把地平线托住，落在纸色渐隐里 */
@@ -579,7 +530,7 @@ export function sceneXiajiang(ctx, w, h, seed = 2001) {
     lineAlpha: 0.2,
     lineWidth: 1.2,
     texture: 1.2,
-    peaks: [{ cx: 0.6, half: 0.2, h: 1, tilt: -0.1, crest: 1.6 }],
+    peaks: [{ cx: 0.6, half: 0.2, h: 1, tilt: -0.1, sharp: 1.2 }],
     fade: [[0, 0.2], [0.3, 0.9], [1, 0.1]],
     footFade: 0.5,
     veins: 1,
@@ -719,7 +670,7 @@ export function sceneXiajiang(ctx, w, h, seed = 2001) {
     dry: 0.2,
   });
 
-  /* 前景老樟：冠盖从左上压下来 */
+  /* 前景老樟：冠盖从左上角压下来 */
   cornerTree(ctx, w, h, {
     x: 0.03,
     y: 1.05,
@@ -738,335 +689,11 @@ export function sceneXiajiang(ctx, w, h, seed = 2001) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   三 · 钱江源：远山叠着，林带压住山脚，前景一潭
+   三 · 余村：左边是被炸开的赭石山，右边是复绿的山
    ══════════════════════════════════════════════════════════ */
 
-export function sceneQianjiangyuan(ctx, w, h, seed = 3001) {
-  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.09, from: 0, to: 0.42 });
-
-  /* 远：两层淡线，越远越薄，只用线不落墨 */
-  farRange(ctx, w, h, {
-    baseY: 0.15,
-    amp: 0.045,
-    alpha: 0.16,
-    seed: seed + 11,
-    peaks: [
-      { cx: 0.06, half: 0.16, h: 1, tilt: 0.34, sharp: 1.6 },
-      { cx: 0.24, half: 0.18, h: 0.72, tilt: -0.2, sharp: 1.5 },
-      { cx: 0.44, half: 0.2, h: 0.44, tilt: 0.14, sharp: 1.35 },
-    ],
-    fade: [[0, 0.9], [0.7, 0.6], [1, 0]],
-  });
-  farRange(ctx, w, h, {
-    baseY: 0.235,
-    amp: 0.07,
-    alpha: 0.26,
-    seed: seed + 17,
-    peaks: [
-      { cx: 0.09, half: 0.17, h: 1, tilt: 0.3, sharp: 1.4 },
-      { cx: 0.27, half: 0.15, h: 0.6, tilt: -0.22, sharp: 1.35 },
-      { cx: 0.46, half: 0.18, h: 0.34, tilt: 0.12, sharp: 1.25 },
-    ],
-    fade: [[0, 1], [0.65, 0.55], [1, 0]],
-  });
-
-  /* 主山：主峰站在左边，次峰矮下去，右端化进纸 */
-  mountain(ctx, w, h, {
-    seed: seed + 21,
-    baseY: h * 0.45,
-    amp: h * 0.27,
-    footY: h * 0.63,
-    tone: '#4d5c3d',
-    toneAlpha: 0.19,
-    lineColor: '#2b2f2b',
-    lineAlpha: 0.46,
-    lineWidth: 2,
-    texture: 3.4,
-    peaks: [
-      { cx: 0.1, half: 0.17, h: 1, tilt: 0.22, crest: 2.3 },
-      { cx: 0.265, half: 0.13, h: 0.6, tilt: -0.2, crest: 2.0 },
-      { cx: 0.385, half: 0.11, h: 0.36, tilt: 0.16, crest: 1.75 },
-    ],
-    fade: [[0, 1], [0.5, 0.88], [0.85, 0.3], [1, 0.05]],
-    shade: [-0.02, 0.14, 0.1],
-    footFade: 0.5,
-    veins: 3,
-    moss: 10,
-    inner: 0.1,
-  });
-
-  /* 山脚雾，把山与林带分开 */
-  mist(ctx, { x: -w * 0.05, y: h * 0.5, w: w * 0.6, h: h * 0.09, seed: seed + 31, strength: 0.85, blobs: 5 });
-
-  /* 中景林：左密右疏，最右一丛只剩个影子 */
-  treeGroup(ctx, {
-    x: w * 0.05,
-    y: h * 0.575,
-    size: 58,
-    count: 3,
-    spread: 0.6,
-    seed: seed + 101,
-    color: '#2f3a29',
-    alpha: 0.44,
-    canopy: '#44523a',
-    canopyAlpha: 0.15,
-    shape: 'mixed',
-  });
-  treeGroup(ctx, {
-    x: w * 0.16,
-    y: h * 0.59,
-    size: 74,
-    count: 4,
-    spread: 0.7,
-    seed: seed + 117,
-    color: '#2b3526',
-    alpha: 0.5,
-    canopy: '#3f4d36',
-    canopyAlpha: 0.17,
-    shape: 'mixed',
-  });
-  treeGroup(ctx, {
-    x: w * 0.3,
-    y: h * 0.605,
-    size: 50,
-    count: 2,
-    spread: 0.6,
-    seed: seed + 131,
-    color: '#37432f',
-    alpha: 0.32,
-    canopy: '#4a5840',
-    canopyAlpha: 0.1,
-  });
-  treeGroup(ctx, {
-    x: w * 0.4,
-    y: h * 0.62,
-    size: 38,
-    count: 2,
-    spread: 0.5,
-    seed: seed + 149,
-    color: '#4a544a',
-    alpha: 0.18,
-    canopyAlpha: 0.07,
-  });
-
-  /* 源头细流，从雾里下到潭 */
-  inkStroke(
-    ctx,
-    [
-      [w * 0.2, h * 0.5],
-      [w * 0.216, h * 0.56],
-      [w * 0.205, h * 0.625],
-      [w * 0.228, h * 0.69],
-      [w * 0.222, h * 0.75],
-    ],
-    { color: '#6d8f8a', width: 1.5, alpha: 0.42, seed: seed + 41, dry: 0.24, layers: 2, taper: false }
-  );
-
-  /* 前景潭：左重右轻，水面在视线下方铺开 */
-  const poolTop = softEdge(-w * 0.02, w * 0.82, h * 0.755, h * 0.016, seed + 51, 30);
-  washArea(
-    ctx,
-    poolTop.concat([
-      [w * 0.82, h * 1.02],
-      [-w * 0.02, h * 1.02],
-    ]),
-    { color: '#6d8f8a', a0: 0.03, a1: 0.17, yTop: h * 0.74, yBot: h }
-  );
-  water(ctx, w * 0.78, h * 0.79, h * 0.99, { seed: seed + 61, rows: 5, alpha: 0.26, x0: 0.04, x1: 0.72 });
-
-  /* 岸边石，压住潭的上缘 */
-  stone(ctx, w * 0.15, h * 0.772, { w: w * 0.075, h: h * 0.026, seed: seed + 71, alpha: 0.4, moss: 4 });
-  stone(ctx, w * 0.225, h * 0.79, { w: w * 0.05, h: h * 0.017, seed: seed + 73, alpha: 0.3, moss: 2 });
-  rockCluster(ctx, w * 0.36, h * 0.8, { w: w * 0.05, h: h * 0.018, seed: seed + 77, alpha: 0.2 });
-
-  /* 前景两棵树：左边这一角就是全幅的重心 */
-  cornerTree(ctx, w, h, { x: 0.035, y: 1.0, size: 176, seed: seed + 901 });
-  cornerTree(ctx, w, h, {
-    x: 0.135,
-    y: 1.03,
-    size: 116,
-    seed: seed + 907,
-    color: '#26301f',
-    alpha: 0.36,
-    canopyAlpha: 0.15,
-    lean: -0.12,
-  });
-
-  /* 一只鸟，落在右上那片空里 */
-  inkStroke(
-    ctx,
-    [
-      [w * 0.5, h * 0.14],
-      [w * 0.516, h * 0.122],
-      [w * 0.534, h * 0.14],
-    ],
-    { color: '#2b2f2b', width: 1, alpha: 0.32, seed: seed + 81, layers: 1, dry: 0, taper: false }
-  );
-}
-
-/* ══════════════════════════════════════════════════════════
-   四 · 云和梯田：等高线从山腰一层层铺下来
-   ══════════════════════════════════════════════════════════ */
-
-export function sceneYunhe(ctx, w, h, seed = 4001) {
-  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.09, from: 0, to: 0.32 });
-
-  farRange(ctx, w, h, {
-    baseY: 0.135,
-    amp: 0.04,
-    alpha: 0.18,
-    seed: seed + 11,
-    peaks: [
-      { cx: 0.06, half: 0.16, h: 1, tilt: 0.34, sharp: 1.6 },
-      { cx: 0.24, half: 0.18, h: 0.7, tilt: -0.18, sharp: 1.45 },
-      { cx: 0.44, half: 0.2, h: 0.42, tilt: 0.12, sharp: 1.3 },
-    ],
-    fade: [[0, 1], [0.7, 0.5], [1, 0]],
-  });
-
-  /* 梯田赖着的那座山：峰顶在左上，坡一直落到画外 */
-  mountain(ctx, w, h, {
-    seed: seed + 21,
-    baseY: h * 0.215,
-    amp: h * 0.145,
-    footY: h * 0.42,
-    tone: '#5d6b4b',
-    toneAlpha: 0.16,
-    lineColor: '#2b2f2b',
-    lineAlpha: 0.42,
-    lineWidth: 1.8,
-    texture: 2,
-    peaks: [
-      { cx: 0.08, half: 0.16, h: 1, tilt: 0.32, crest: 2.3 },
-      { cx: 0.24, half: 0.13, h: 0.58, tilt: -0.2, crest: 1.9 },
-    ],
-    fade: [[0, 1], [0.45, 0.88], [0.85, 0.3], [1, 0.05]],
-    footFade: 0.65,
-    veins: 2,
-    moss: 8,
-  });
-
-  mist(ctx, { x: -w * 0.05, y: h * 0.3, w: w * 0.55, h: h * 0.07, seed: seed + 31, strength: 0.85, blobs: 4 });
-
-  /* 右侧一座山的剪影：淡，只用来托住梯田的右缘 */
-  mountain(ctx, w, h, {
-    seed: seed + 27,
-    baseY: h * 0.26,
-    amp: h * 0.1,
-    footY: h * 0.45,
-    tone: '#5d6b4b',
-    toneAlpha: 0.1,
-    lineColor: '#4a544a',
-    lineAlpha: 0.18,
-    lineWidth: 1.1,
-    texture: 0.8,
-    peaks: [{ cx: 0.52, half: 0.2, h: 1, tilt: 0.1, crest: 1.7 }],
-    fade: [[0, 0], [0.3, 0.8], [1, 0.05]],
-    footFade: 0.65,
-    veins: 0,
-    moss: 0,
-  });
-
-  /* 主坡：等高带从山腰铺到画面下缘 */
-  terraceFan(ctx, {
-    top: h * 0.315,
-    bottom: h * 1.02,
-    cx: w * 0.235,
-    spread: w * 0.255,
-    rows: 27,
-    seed: seed + 41,
-    color: '#6f8055',
-    alpha: 0.42,
-    width: 1,
-    tilt: 0.16,
-    sink: 0.15,
-  });
-
-  /* 右边另一道坡：层数少，淡，接上主坡 */
-  terraceFan(ctx, {
-    top: h * 0.36,
-    bottom: h * 0.88,
-    cx: w * 0.53,
-    spread: w * 0.16,
-    rows: 13,
-    seed: seed + 47,
-    color: '#7c9160',
-    alpha: 0.18,
-    width: 0.8,
-    tilt: -0.1,
-    sink: 0.13,
-  });
-
-  /* 田间的屋：三间，散在坎上，不成排 */
-  houseRow(ctx, {
-    seed: seed + 600,
-    alpha: 0.5,
-    list: [
-      [w * 0.205, h * 0.575, 24, 0],
-      [w * 0.268, h * 0.648, 20, 1],
-      [w * 0.163, h * 0.705, 22, 0],
-    ],
-  });
-
-  /* 田边的树：只在坎沿上长几棵 */
-  treeGroup(ctx, {
-    x: w * 0.35,
-    y: h * 0.625,
-    size: 42,
-    count: 2,
-    spread: 0.45,
-    seed: seed + 611,
-    color: '#37432f',
-    alpha: 0.26,
-    canopyAlpha: 0.08,
-  });
-  treeGroup(ctx, {
-    x: w * 0.42,
-    y: h * 0.755,
-    size: 34,
-    count: 2,
-    spread: 0.4,
-    seed: seed + 619,
-    color: '#3f4a38',
-    alpha: 0.18,
-    canopyAlpha: 0.06,
-  });
-
-  /* 中景的云带：横过梯田腰部，把层数断开 */
-  mist(ctx, { x: w * 0.02, y: h * 0.83, w: w * 0.56, h: h * 0.055, seed: seed + 61, strength: 0.5, blobs: 3 });
-
-  /* 前景一道坎：最下面一层田埂，压得最重 */
-  inkStroke(
-    ctx,
-    [
-      [-w * 0.02, h * 0.965],
-      [w * 0.1, h * 0.948],
-      [w * 0.22, h * 0.972],
-      [w * 0.34, h * 0.955],
-      [w * 0.46, h * 0.985],
-    ],
-    { color: '#2b2f2b', width: 2.2, alpha: 0.42, seed: seed + 71, wobble: 1.2, dry: 0.34, layers: 2, taper: false }
-  );
-  groundWash(ctx, { w, y0: h * 0.94, y1: h * 1.02, color: '#5d6b4b', alpha: 0.2, seed: seed + 73, x0: 0, x1: 0.5 });
-
-  /* 左下角一棵树，收住整个画面 */
-  cornerTree(ctx, w, h, {
-    x: 0.022,
-    y: 1.05,
-    size: 154,
-    seed: seed + 901,
-    alpha: 0.46,
-    canopyAlpha: 0.18,
-    lean: 0.08,
-  });
-}
-
-/* ══════════════════════════════════════════════════════════
-   五 · 浦江：河面横贯下半幅，对岸是村镇
-   ══════════════════════════════════════════════════════════ */
-
-export function scenePujiang(ctx, w, h, seed = 5001) {
-  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.08, from: 0, to: 0.38 });
+export function sceneYucun(ctx, w, h, seed = 1001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.07, from: 0, to: 0.38 });
 
   farRange(ctx, w, h, {
     baseY: 0.16,
@@ -1074,160 +701,207 @@ export function scenePujiang(ctx, w, h, seed = 5001) {
     alpha: 0.16,
     seed: seed + 11,
     peaks: [
-      { cx: 0.07, half: 0.17, h: 1, tilt: 0.32, sharp: 1.5 },
-      { cx: 0.25, half: 0.19, h: 0.6, tilt: -0.14, sharp: 1.35 },
-      { cx: 0.45, half: 0.2, h: 0.34, tilt: 0.1, sharp: 1.2 },
+      { cx: 0.1, half: 0.2, h: 1, tilt: 0.2, sharp: 1.45 },
+      { cx: 0.32, half: 0.18, h: 0.66, tilt: -0.14, sharp: 1.35 },
+      { cx: 0.5, half: 0.2, h: 0.4, tilt: 0.1, sharp: 1.2 },
     ],
     fade: [[0, 1], [0.7, 0.5], [1, 0]],
   });
 
-  /* 对岸的低山，压得很平 */
+  /* 右：复绿的山。先画，让左边的矿山压在前面。
+   * 峰位要收在 0.5 以内：app.js 从 w*0.4 起盖纸色渐隐，再往右就看不见了。
+   * 这一幅的对照全在左半幅，矿在 0.03-0.27，绿在 0.28-0.52。 */
   mountain(ctx, w, h, {
     seed: seed + 21,
-    baseY: h * 0.32,
-    amp: h * 0.09,
-    footY: h * 0.52,
-    tone: '#6f8055',
-    toneAlpha: 0.12,
-    lineColor: '#3a3f38',
-    lineAlpha: 0.3,
-    lineWidth: 1.4,
-    texture: 1.5,
+    baseY: h * 0.44,
+    amp: h * 0.185,
+    footY: h * 0.7,
+    tone: '#7c9160',
+    toneAlpha: 0.17,
+    lineColor: '#2b2f2b',
+    lineAlpha: 0.36,
+    lineWidth: 1.8,
+    texture: 2.4,
     peaks: [
-      { cx: 0.11, half: 0.2, h: 1, tilt: 0.18, crest: 1.6 },
-      { cx: 0.32, half: 0.16, h: 0.54, tilt: -0.16, crest: 1.5 },
+      { cx: 0.315, half: 0.14, h: 1, tilt: -0.1, sharp: 1.2 },
+      { cx: 0.44, half: 0.115, h: 0.66, tilt: 0.14, sharp: 1.15 },
     ],
-    fade: [[0, 1], [0.5, 0.8], [0.85, 0.2], [1, 0.04]],
+    fade: [[0, 0.1], [0.22, 0.95], [0.62, 0.6], [1, 0.08]],
     footFade: 0.55,
-    veins: 1,
+    veins: 2,
+    moss: 7,
+  });
+
+  /* 左：赭石矿山。剖面里一段直线，是宕口被切平的台阶 */
+  const mineKnots = [
+    [0.004, 0.02],
+    [0.032, 0.36],
+    [0.06, 0.7],
+    [0.088, 0.95],
+    [0.115, 0.76],
+    [0.152, 0.72, 'lin'],
+    [0.19, 0.7],
+    [0.219, 0.42],
+    [0.245, 0.15],
+    [0.265, 0.02],
+  ];
+  mass(ctx, {
+    vw: w,
+    baseY: h * 0.435,
+    amp: h * 0.245,
+    knots: mineKnots,
+    span: [0.004, 0.265],
+    footY: h * 0.86,
+    tone: '#b1813f',
+    toneAlpha: 0.22,
+    lineColor: '#5c4526',
+    lineAlpha: 0.54,
+    lineWidth: 2.2,
+    dry: 0.22,
+    layers: 1,
+    cun: 12,
+    cunLen: 0.15,
+    cunAlpha: 0.42,
     moss: 5,
+    seed: seed + 31,
+    footFade: 0.35,
+    band: 0.06,
   });
 
-  /* 对岸：一条窄的岸带 */
-  const farBankY = h * 0.5;
-  const bankTop = softEdge(-w * 0.02, w * 0.86, farBankY, h * 0.005, seed + 31, 30);
-  washArea(
-    ctx,
-    bankTop.concat([
-      [w * 0.86, farBankY + h * 0.04],
-      [-w * 0.02, farBankY + h * 0.04],
-    ]),
-    { color: '#7c9160', a0: 0.18, a1: 0.06, yTop: farBankY, yBot: farBankY + h * 0.045 }
-  );
-
-  /* 对岸的村镇：左边密，往右稀 */
-  houseRow(ctx, {
-    seed: seed + 400,
-    alpha: 0.46,
-    list: [
-      [w * 0.045, h * 0.487, 24, 0],
-      [w * 0.098, h * 0.495, 28, 1],
-      [w * 0.148, h * 0.485, 23, 0],
-      [w * 0.198, h * 0.5, 26, 0],
-      [w * 0.268, h * 0.492, 21, 1],
-      [w * 0.352, h * 0.5, 20, 0],
-      [w * 0.47, h * 0.496, 22, 1],
-    ],
+  /* 宕口：阶梯环 + 坑底 */
+  pit(ctx, w * 0.135, h * 0.63, {
+    r: w * 0.05,
+    depth: 1,
+    seed: seed + 41,
+    alpha: 0.55,
+    color: '#8a6733',
   });
 
-  /* 对岸的柳与树丛 */
-  treeShape(ctx, w * 0.232, h * 0.505, {
-    size: 58,
-    seed: seed + 501,
-    color: '#37432f',
-    alpha: 0.42,
-    canopy: '#4a5840',
-    canopyAlpha: 0.13,
-    shape: 'willow',
-  });
-  treeShape(ctx, w * 0.3, h * 0.5, {
-    size: 48,
-    seed: seed + 507,
-    color: '#3f4a38',
-    alpha: 0.32,
-    canopyAlpha: 0.1,
-    shape: 'willow',
-  });
+  /* 切面上几道炮孔痕：竖着拉下来，长短不一 */
+  for (let i = 0; i < 5; i++) {
+    const x = w * (0.108 + i * 0.016 + ((i * 17) % 5) * 0.002);
+    inkStroke(
+      ctx,
+      [
+        [x, h * (0.5 + ((i * 13) % 7) * 0.006)],
+        [x + 1.2, h * 0.575],
+      ],
+      {
+        color: '#5c4526',
+        width: 0.9,
+        alpha: 0.24,
+        seed: seed + 500 + i,
+        wobble: 0.3,
+        dry: 0.34,
+        layers: 1,
+        taper: false,
+      }
+    );
+  }
+
+  rockCluster(ctx, w * 0.05, h * 0.79, { w: w * 0.06, h: h * 0.026, seed: seed + 47, alpha: 0.34 });
+  rockCluster(ctx, w * 0.21, h * 0.805, { w: w * 0.05, h: h * 0.021, seed: seed + 49, alpha: 0.26 });
+
+  /* 山谷里的雾，把两座山分开 */
+  mist(ctx, { x: w * 0.14, y: h * 0.6, w: w * 0.42, h: h * 0.1, seed: seed + 51, strength: 0.9, blobs: 4 });
+
+  /* 右坡的树：只长在复绿的那一面 */
   treeGroup(ctx, {
-    x: w * 0.065,
-    y: h * 0.5,
-    size: 44,
-    count: 3,
-    spread: 0.5,
-    seed: seed + 513,
-    color: '#37432f',
-    alpha: 0.3,
-    canopyAlpha: 0.1,
+    x: w * 0.36,
+    y: h * 0.625,
+    size: 56,
+    count: 4,
+    spread: 0.7,
+    seed: seed + 601,
+    color: '#2f3a29',
+    alpha: 0.4,
+    canopy: '#44523a',
+    canopyAlpha: 0.14,
     shape: 'mixed',
   });
-
-  /* 河面：一大片淡青，往下越来越淡 */
-  const waterTop = softEdge(-w * 0.02, w * 0.98, h * 0.528, h * 0.007, seed + 41, 32);
-  washArea(
-    ctx,
-    waterTop.concat([
-      [w * 0.98, h * 1.02],
-      [-w * 0.02, h * 1.02],
-    ]),
-    { color: '#6d8f8a', a0: 0.17, a1: 0.05, yTop: h * 0.52, yBot: h }
-  );
-
-  /* 水纹：中上段密，越靠近观者越稀 */
-  water(ctx, w * 0.92, h * 0.56, h * 0.86, { seed: seed + 51, rows: 6, alpha: 0.26, x0: 0.02, x1: 0.9 });
-
-  /* 河岸线：一道实笔，压住岸与水 */
-  inkStroke(ctx, waterTop, {
-    color: '#2b2f2b',
-    width: 1.5,
-    alpha: 0.42,
-    seed: seed + 61,
-    dry: 0.18,
-    layers: 2,
-    taper: false,
-    step: 4,
+  treeGroup(ctx, {
+    x: w * 0.48,
+    y: h * 0.655,
+    size: 44,
+    count: 2,
+    spread: 0.5,
+    seed: seed + 619,
+    color: '#3a4632',
+    alpha: 0.26,
+    canopyAlpha: 0.09,
   });
 
-  /* 一条船：人在船上，船尾拖两道水痕 */
-  boat(ctx, w * 0.34, h * 0.79, { size: 36, seed: seed + 71, alpha: 0.46 });
-
-  /* 近岸：左下角一块湿岸 */
-  const nearBank = softEdge(-w * 0.02, w * 0.44, h * 0.905, h * 0.011, seed + 81, 22);
+  /* 谷底：一条淡染的地面，压住右侧 */
+  const floorTop = softEdge(-w * 0.02, w * 0.8, h * 0.795, h * 0.012, seed + 61, 28);
   washArea(
     ctx,
-    nearBank.concat([
-      [w * 0.44, h * 1.02],
+    floorTop.concat([
+      [w * 0.8, h * 1.02],
       [-w * 0.02, h * 1.02],
     ]),
-    { color: '#5d6b4b', a0: 0.04, a1: 0.22, yTop: h * 0.9, yBot: h }
+    { color: '#7c9160', a0: 0.03, a1: 0.12, yTop: h * 0.79, yBot: h }
   );
-  inkStroke(ctx, nearBank, {
-    color: '#2b2f2b',
-    width: 1.3,
-    alpha: 0.3,
-    seed: seed + 83,
-    dry: 0.3,
-    layers: 1,
-    taper: false,
-    step: 4,
-  });
-  reeds(ctx, w * 0.15, h * 0.93, { size: 44, count: 6, seed: seed + 87, alpha: 0.3, dir: 1 });
-  stone(ctx, w * 0.24, h * 0.925, { w: w * 0.045, h: h * 0.016, seed: seed + 91, alpha: 0.24, moss: 2 });
 
-  /* 前景大树：从左边探出来，冠盖压住河面上空 */
-  cornerTree(ctx, w, h, {
-    x: 0.04,
-    y: 1.06,
-    size: 198,
-    seed: seed + 901,
-    color: '#1f271c',
+  houseRow(ctx, {
+    seed: seed + 700,
     alpha: 0.48,
-    canopyAlpha: 0.2,
-    lean: 0.26,
+    list: [
+      [w * 0.305, h * 0.848, 30, 0],
+      [w * 0.375, h * 0.875, 26, 1],
+      [w * 0.44, h * 0.905, 22, 0],
+    ],
+  });
+
+  /* 塘：右下的一小块水，让地面不是白板 */
+  const pond = softEdge(w * 0.4, w * 0.76, h * 0.93, h * 0.007, seed + 71, 20);
+  washArea(
+    ctx,
+    pond.concat([
+      [w * 0.76, h * 1.02],
+      [w * 0.4, h * 1.02],
+    ]),
+    { color: '#6d8f8a', a0: 0.1, a1: 0.16, yTop: h * 0.93, yBot: h }
+  );
+  water(ctx, w * 0.36, h * 0.94, h * 0.99, { seed: seed + 73, rows: 2, alpha: 0.2, x0: 0.42, x1: 0.72 });
+
+  /* 山道：从村里往左上走，接上矿山的脚 */
+  inkStroke(
+    ctx,
+    [
+      [w * 0.37, h * 0.972],
+      [w * 0.32, h * 0.925],
+      [w * 0.283, h * 0.878],
+      [w * 0.255, h * 0.845],
+    ],
+    { color: '#8d948a', width: 1.2, alpha: 0.28, seed: seed + 81, dry: 0.34, layers: 1, taper: false }
+  );
+
+  /* 前景：左角竹丛，压住矿山的脚 */
+  cornerTree(ctx, w, h, {
+    x: 0.03,
+    y: 1.02,
+    size: 150,
+    seed: seed + 801,
+    color: '#26301f',
+    alpha: 0.46,
+    canopyAlpha: 0.18,
+    shape: 'bamboo',
+  });
+  cornerTree(ctx, w, h, {
+    x: 0.085,
+    y: 1.06,
+    size: 116,
+    seed: seed + 807,
+    color: '#2b3526',
+    alpha: 0.3,
+    canopyAlpha: 0.13,
+    lean: 0.14,
+    shape: 'bamboo',
   });
 }
 
 /* ══════════════════════════════════════════════════════════
-   六 · 新溪桥村：菜地、大棚、远山
+   四 · 新溪桥：菜地垄行、大棚、村舍、远山
    ══════════════════════════════════════════════════════════ */
 
 export function sceneXinxinqiao(ctx, w, h, seed = 6001) {
@@ -1259,8 +933,8 @@ export function sceneXinxinqiao(ctx, w, h, seed = 6001) {
     lineWidth: 1.3,
     texture: 1.2,
     peaks: [
-      { cx: 0.1, half: 0.18, h: 1, tilt: 0.16, crest: 1.6 },
-      { cx: 0.27, half: 0.15, h: 0.55, tilt: -0.18, crest: 1.5 },
+      { cx: 0.1, half: 0.18, h: 1, tilt: 0.18, sharp: 1.2 },
+      { cx: 0.27, half: 0.15, h: 0.55, tilt: -0.18, sharp: 1.15 },
     ],
     fade: [[0, 1], [0.62, 0.4], [1, 0.02]],
     footFade: 0.6,
@@ -1429,6 +1103,328 @@ export function sceneXinxinqiao(ctx, w, h, seed = 6001) {
     alpha: 0.46,
     canopyAlpha: 0.18,
     lean: 0.1,
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   五 · 浦江：河面横贯下半幅，对岸是村镇
+   ══════════════════════════════════════════════════════════ */
+
+export function scenePujiang(ctx, w, h, seed = 5001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.08, from: 0, to: 0.38 });
+
+  farRange(ctx, w, h, {
+    baseY: 0.16,
+    amp: 0.045,
+    alpha: 0.16,
+    seed: seed + 11,
+    peaks: [
+      { cx: 0.07, half: 0.17, h: 1, tilt: 0.32, sharp: 1.5 },
+      { cx: 0.25, half: 0.19, h: 0.6, tilt: -0.14, sharp: 1.35 },
+      { cx: 0.45, half: 0.2, h: 0.34, tilt: 0.1, sharp: 1.2 },
+    ],
+    fade: [[0, 1], [0.7, 0.5], [1, 0]],
+  });
+
+  /* 对岸的低山，压得很平 */
+  mountain(ctx, w, h, {
+    seed: seed + 21,
+    baseY: h * 0.32,
+    amp: h * 0.09,
+    footY: h * 0.52,
+    tone: '#6f8055',
+    toneAlpha: 0.12,
+    lineColor: '#3a3f38',
+    lineAlpha: 0.3,
+    lineWidth: 1.4,
+    texture: 1.5,
+    peaks: [
+      { cx: 0.11, half: 0.2, h: 1, tilt: 0.2, sharp: 1.2 },
+      { cx: 0.32, half: 0.16, h: 0.54, tilt: -0.16, sharp: 1.15 },
+    ],
+    fade: [[0, 1], [0.5, 0.72], [0.85, 0.2], [1, 0.04]],
+    footFade: 0.6,
+    veins: 1,
+    moss: 5,
+  });
+
+  /* 对岸：一条窄的岸带 */
+  const farBankY = h * 0.5;
+  const bankTop = softEdge(-w * 0.02, w * 0.86, farBankY, h * 0.005, seed + 31, 30);
+  washArea(
+    ctx,
+    bankTop.concat([
+      [w * 0.86, farBankY + h * 0.04],
+      [-w * 0.02, farBankY + h * 0.04],
+    ]),
+    { color: '#7c9160', a0: 0.18, a1: 0.06, yTop: farBankY, yBot: farBankY + h * 0.045 }
+  );
+
+  /* 对岸的村镇：左边密，往右稀 */
+  houseRow(ctx, {
+    seed: seed + 400,
+    alpha: 0.46,
+    list: [
+      [w * 0.045, h * 0.487, 24, 0],
+      [w * 0.098, h * 0.495, 28, 1],
+      [w * 0.148, h * 0.485, 23, 0],
+      [w * 0.198, h * 0.5, 26, 0],
+      [w * 0.268, h * 0.492, 21, 1],
+      [w * 0.352, h * 0.5, 20, 0],
+      [w * 0.47, h * 0.496, 22, 1],
+    ],
+  });
+
+  /* 对岸的柳与树丛 */
+  treeShape(ctx, w * 0.232, h * 0.505, {
+    size: 58,
+    seed: seed + 501,
+    color: '#37432f',
+    alpha: 0.42,
+    canopy: '#4a5840',
+    canopyAlpha: 0.13,
+    shape: 'willow',
+  });
+  treeShape(ctx, w * 0.3, h * 0.5, {
+    size: 48,
+    seed: seed + 507,
+    color: '#3f4a38',
+    alpha: 0.32,
+    canopyAlpha: 0.1,
+    shape: 'willow',
+  });
+  treeGroup(ctx, {
+    x: w * 0.065,
+    y: h * 0.5,
+    size: 44,
+    count: 3,
+    spread: 0.5,
+    seed: seed + 513,
+    color: '#37432f',
+    alpha: 0.3,
+    canopyAlpha: 0.1,
+    shape: 'mixed',
+  });
+
+  /* 河面：一大片淡青，往下越来越淡 */
+  const waterTop = softEdge(-w * 0.02, w * 0.98, h * 0.528, h * 0.007, seed + 41, 32);
+  washArea(
+    ctx,
+    waterTop.concat([
+      [w * 0.98, h * 1.02],
+      [-w * 0.02, h * 1.02],
+    ]),
+    { color: '#6d8f8a', a0: 0.17, a1: 0.05, yTop: h * 0.52, yBot: h }
+  );
+
+  /* 水纹：中上段密，越靠近观者越稀 */
+  water(ctx, w * 0.92, h * 0.56, h * 0.86, { seed: seed + 51, rows: 6, alpha: 0.26, x0: 0.02, x1: 0.9 });
+
+  /* 河岸线：一道实笔，压住岸与水 */
+  inkStroke(ctx, waterTop, {
+    color: '#2b2f2b',
+    width: 1.5,
+    alpha: 0.42,
+    seed: seed + 61,
+    dry: 0.18,
+    layers: 2,
+    taper: false,
+    step: 4,
+  });
+
+  /* 一条船：人在船上，船尾拖两道水痕 */
+  boat(ctx, w * 0.34, h * 0.79, { size: 36, seed: seed + 71, alpha: 0.46 });
+
+  /* 近岸：左下角一块湿岸 */
+  const nearBank = softEdge(-w * 0.02, w * 0.44, h * 0.905, h * 0.011, seed + 81, 22);
+  washArea(
+    ctx,
+    nearBank.concat([
+      [w * 0.44, h * 1.02],
+      [-w * 0.02, h * 1.02],
+    ]),
+    { color: '#5d6b4b', a0: 0.04, a1: 0.22, yTop: h * 0.9, yBot: h }
+  );
+  inkStroke(ctx, nearBank, {
+    color: '#2b2f2b',
+    width: 1.3,
+    alpha: 0.3,
+    seed: seed + 83,
+    dry: 0.3,
+    layers: 1,
+    taper: false,
+    step: 4,
+  });
+  reeds(ctx, w * 0.15, h * 0.93, { size: 44, count: 6, seed: seed + 87, alpha: 0.3, dir: 1 });
+  stone(ctx, w * 0.24, h * 0.925, { w: w * 0.045, h: h * 0.016, seed: seed + 91, alpha: 0.24, moss: 2 });
+
+  /* 前景大树：从左边探出来，冠盖压住河面上空 */
+  cornerTree(ctx, w, h, {
+    x: 0.04,
+    y: 1.06,
+    size: 198,
+    seed: seed + 901,
+    color: '#1f271c',
+    alpha: 0.48,
+    canopyAlpha: 0.2,
+    lean: 0.26,
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   六 · 云和梯田：等高线从山腰一层层铺下来
+   ══════════════════════════════════════════════════════════ */
+
+export function sceneYunhe(ctx, w, h, seed = 4001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.09, from: 0, to: 0.32 });
+
+  farRange(ctx, w, h, {
+    baseY: 0.135,
+    amp: 0.04,
+    alpha: 0.18,
+    seed: seed + 11,
+    peaks: [
+      { cx: 0.06, half: 0.16, h: 1, tilt: 0.34, sharp: 1.6 },
+      { cx: 0.24, half: 0.18, h: 0.7, tilt: -0.18, sharp: 1.45 },
+      { cx: 0.44, half: 0.2, h: 0.42, tilt: 0.12, sharp: 1.3 },
+    ],
+    fade: [[0, 1], [0.7, 0.5], [1, 0]],
+  });
+
+  /* 梯田赖着的那座山：峰顶在左上，坡一直落到画外 */
+  mountain(ctx, w, h, {
+    seed: seed + 21,
+    baseY: h * 0.215,
+    amp: h * 0.145,
+    footY: h * 0.42,
+    tone: '#5d6b4b',
+    toneAlpha: 0.16,
+    lineColor: '#2b2f2b',
+    lineAlpha: 0.42,
+    lineWidth: 1.8,
+    texture: 2,
+    peaks: [
+      { cx: 0.08, half: 0.16, h: 1, tilt: 0.38, sharp: 1.35 },
+      { cx: 0.24, half: 0.13, h: 0.6, tilt: -0.2, sharp: 1.2 },
+    ],
+    fade: [[0, 1], [0.4, 0.8], [0.75, 0.15], [1, 0]],
+    footFade: 0.7,
+    veins: 2,
+    moss: 8,
+  });
+
+  mist(ctx, { x: -w * 0.05, y: h * 0.3, w: w * 0.55, h: h * 0.07, seed: seed + 31, strength: 0.85, blobs: 4 });
+
+  /* 右侧一整座山的剪影：淡，只用来托住梯田的右缘 */
+  mountain(ctx, w, h, {
+    seed: seed + 27,
+    baseY: h * 0.26,
+    amp: h * 0.1,
+    footY: h * 0.45,
+    tone: '#5d6b4b',
+    toneAlpha: 0.1,
+    lineColor: '#4a544a',
+    lineAlpha: 0.18,
+    lineWidth: 1.1,
+    texture: 0.8,
+    peaks: [{ cx: 0.52, half: 0.2, h: 1, tilt: 0.1, sharp: 1.2 }],
+    fade: [[0, 0], [0.3, 0.8], [1, 0.05]],
+    footFade: 0.7,
+    veins: 0,
+    moss: 0,
+  });
+
+  /* 主坡：等高带从山腰铺到画面下缘 */
+  terraceFan(ctx, {
+    top: h * 0.315,
+    bottom: h * 1.02,
+    cx: w * 0.235,
+    spread: w * 0.255,
+    rows: 27,
+    seed: seed + 41,
+    color: '#6f8055',
+    alpha: 0.42,
+    width: 1,
+    tilt: 0.16,
+    sink: 0.15,
+  });
+
+  /* 右边另一道坡：层数少，淡，接上主坡 */
+  terraceFan(ctx, {
+    top: h * 0.36,
+    bottom: h * 0.88,
+    cx: w * 0.53,
+    spread: w * 0.16,
+    rows: 13,
+    seed: seed + 47,
+    color: '#7c9160',
+    alpha: 0.18,
+    width: 0.8,
+    tilt: -0.1,
+    sink: 0.13,
+  });
+
+  /* 田间的屋：三间，散在坎上，不成排 */
+  houseRow(ctx, {
+    seed: seed + 600,
+    alpha: 0.5,
+    list: [
+      [w * 0.205, h * 0.575, 24, 0],
+      [w * 0.268, h * 0.648, 20, 1],
+      [w * 0.163, h * 0.705, 22, 0],
+    ],
+  });
+
+  /* 田边的树：只在坎沿上长几棵 */
+  treeGroup(ctx, {
+    x: w * 0.35,
+    y: h * 0.625,
+    size: 42,
+    count: 2,
+    spread: 0.45,
+    seed: seed + 611,
+    color: '#37432f',
+    alpha: 0.26,
+    canopyAlpha: 0.08,
+  });
+  treeGroup(ctx, {
+    x: w * 0.42,
+    y: h * 0.755,
+    size: 34,
+    count: 2,
+    spread: 0.4,
+    seed: seed + 619,
+    color: '#3f4a38',
+    alpha: 0.18,
+    canopyAlpha: 0.06,
+  });
+
+  /* 中景的云带：横过梯田腰部，把层数断开 */
+  mist(ctx, { x: w * 0.02, y: h * 0.83, w: w * 0.56, h: h * 0.055, seed: seed + 61, strength: 0.5, blobs: 3 });
+
+  /* 前景一道坎：最下面一层田埂，压得最重 */
+  inkStroke(
+    ctx,
+    [
+      [-w * 0.02, h * 0.965],
+      [w * 0.1, h * 0.948],
+      [w * 0.22, h * 0.972],
+      [w * 0.34, h * 0.955],
+      [w * 0.46, h * 0.985],
+    ],
+    { color: '#2b2f2b', width: 2.2, alpha: 0.42, seed: seed + 71, wobble: 1.2, dry: 0.34, layers: 2, taper: false }
+  );
+  groundWash(ctx, { w, y0: h * 0.94, y1: h * 1.02, color: '#5d6b4b', alpha: 0.2, seed: seed + 73, x0: 0, x1: 0.5 });
+
+  /* 左下角一棵树，收住整个画面 */
+  cornerTree(ctx, w, h, {
+    x: 0.022,
+    y: 1.05,
+    size: 154,
+    seed: seed + 901,
+    alpha: 0.46,
+    canopyAlpha: 0.18,
+    lean: 0.08,
   });
 }
 
