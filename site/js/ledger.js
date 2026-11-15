@@ -50,7 +50,12 @@ const CONFIG = {
   },
   restore: {
     name: '封山',
-    income: () => 4,
+    // 封山期几乎无收入，但山恢复后村里会慢慢找到新的活路
+    income: (year, health) => {
+      if (health < 55) return 4;
+      const t = (year - START_YEAR) / 20;
+      return Math.round(4 + (health - 55) * 0.55 + t * 26);
+    },
     mountain: 3.4,
     desc: '什么都不做，只是让它歇着。最快恢复，也最没有收入。',
   },
@@ -146,9 +151,9 @@ function stepYear() {
   // 年份推进
   S.year += 1;
 
-  // 结算
+  // 结算：村集体年收入就是当年的进账，不是累积的存款
   const delta = income;
-  S.cash = Math.max(0, Math.round(S.cash * 0.72 + delta * 0.62));
+  S.cash = Math.max(0, Math.round(delta * 0.92 + S.cash * 0.08));
 
   // 山体
   const mDelta = cfg.mountain;
@@ -169,9 +174,12 @@ function stepYear() {
     mountain: Math.round(S.mountain),
   });
 
-  // 关键节点：第 4 年（2009）触发关矿的抉择
-  if (!S.pledged && S.year >= 2009) {
-    S.phase = 'decide';
+  // 关键节点：2009 年第一次问，此后每 3 年再问一次
+  if (!S.pledged) {
+    const due = S.nextDecide || 2009;
+    if (S.year >= due) {
+      S.phase = 'decide';
+    }
   }
 
   if (S.year >= END_YEAR) {
@@ -319,14 +327,15 @@ function renderDecision() {
   `;
 
   panelEl.querySelector('#lg-close')?.addEventListener('click', () => {
+    const before = S.cash;
     S.pledged = true;
     S.closedMineYear = S.year;
     S.mode = 'restore';
-    S.cash = Math.round(S.cash * 0.12);
+    S.cash = Math.round(before * 0.12);
     S.rows.unshift({
       year: S.year,
       mode: '关矿',
-      income: -Math.round(S.cash * 0.6),
+      income: S.cash - before,
       cash: S.cash,
       mountain: Math.round(S.mountain),
     });
@@ -338,9 +347,8 @@ function renderDecision() {
     // 再撑三年才会重新问
     S.pledged = false;
     S.mode = 'mine';
+    S.nextDecide = S.year + 3;
     S.phase = 'play';
-    // 标记延后重问
-    S.askedAgain = S.year + 3;
     renderPanel();
   });
 }
