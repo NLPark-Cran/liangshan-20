@@ -9,8 +9,14 @@
 import { SITES, RARITY, HABITATS, TYPHOON_NAMES, makeRecord, allSpecies, TOTAL_SPECIES } from '../data/birds.js';
 import { inkStroke, mulberry32, hexA, seal } from './brush.js';
 import { mountain, treeShape, haze, water } from './inkfig.js';
+import { auth, drawBird } from './api.js';
 
 const STORE_KEY = 'liangshan20.birdlog.v1';
+
+/** 转义，用于拼 HTML */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
 
 /* ────────────────────────── 本地存档 ────────────────────────── */
 
@@ -132,13 +138,13 @@ function bindShell() {
     }
 
     if (e.target.closest('#bird-draw')) {
-      doDraw();
+      void doDraw();
       return;
     }
 
     if (e.target.closest('#bird-typhoon')) {
       typhoonActive = true;
-      doDraw(true);
+      void doDraw(true);
       return;
     }
 
@@ -191,14 +197,31 @@ function renderStage() {
 
 /* ────────────────────────── 抽一页 ────────────────────────── */
 
-function doDraw(typhoon = false) {
+async function doDraw(typhoon = false) {
   const stage = document.getElementById('bird-stage');
   if (!stage) return;
 
-  const luck = Math.random();
-  const rec = makeRecord(currentSite, { typhoon, luck });
+  // 优先走后端判定；后端不可用时退回本地抽签，页面照常能玩
+  let rec = null;
+  let serverId = null;
+  if (auth.ready && auth.online) {
+    try {
+      const r = await drawBird(currentSite.id, typhoon);
+      if (r.ok && r.record) {
+        rec = r.record;
+        serverId = r.record.typhoonName ?? null;
+      }
+    } catch (_) {
+      /* 落到本地 */
+    }
+  }
 
-  // 记入存档
+  if (!rec) {
+    const luck = Math.random();
+    rec = makeRecord(currentSite, { typhoon, luck });
+  }
+
+  // 本地存档：只存到这台设备，用于离线时的图鉴
   log.records.push(rec);
   const key = rec.species;
   log.seen[key] = (log.seen[key] || 0) + 1;
@@ -208,7 +231,7 @@ function doDraw(typhoon = false) {
 
   const typhoonLine = rec.typhoon
     ? `<div class="rec__typhoon">
-         <span class="rec__typhoontag">台风「${pickTyphoon()}」</span>
+         <span class="rec__typhoontag">台风「${esc(serverId || pickTyphoon())}」</span>
          <span>过境后第二天清晨</span>
        </div>`
     : '';

@@ -1,0 +1,28 @@
+{
+  "name": "@liangshan/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --out-dir dist --clean",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@hono/zod-validator": "^0.5.0",
+    "hono": "^4.6.0",
+    "ioredis": "^5.4.0",
+    "pg": "^8.13.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.0",
+    "tsup": "^8.2.0",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.0"
+  }
+}

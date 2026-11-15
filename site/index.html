@@ -16,10 +16,20 @@
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/scroll.css">
 <link rel="stylesheet" href="css/extra.css">
+<link rel="stylesheet" href="css/auth.css">
 </head>
 <body>
 
 <a class="skip" href="#scroll-anchor">跳到地图</a>
+
+<!-- 身份条 -->
+<div class="authbar" id="authbar" aria-live="polite"></div>
+
+<!-- 账号面板 -->
+<div class="authpanel" id="authpanel" role="dialog" aria-modal="true" aria-label="账号" hidden></div>
+
+<!-- 轻提示 -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- 加载态 -->
 <div class="boot" id="boot">
@@ -53,6 +63,7 @@
         <button class="btn btn--ghost" id="btn-ledger">一亩山的账本</button>
         <button class="btn btn--ghost" id="btn-birds">观鸟手账</button>
         <button class="btn btn--ghost" id="btn-tern">等一只鸟回来</button>
+        <button class="btn btn--ghost" id="btn-stats">我的战绩</button>
       </div>
 
       <p class="hero__meta">
@@ -226,6 +237,19 @@
       <div class="ledger__stage"><canvas id="tern-canvas"></canvas></div>
       <div class="ledger__panel" id="tern-panel"></div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════ 战绩覆盖层 ══════════════ -->
+<div class="overlay" id="statslog" role="dialog" aria-modal="true" aria-label="战绩与排行" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb" id="stats-crumb">战绩与排行</span>
+    <button class="overlay__close" id="stats-close">
+      收起 <span aria-hidden="true">✕</span>
+    </button>
+  </div>
+  <div class="overlay__body">
+    <div class="wrap" id="stats-body" style="padding:3rem 0 6rem"></div>
   </div>
 </div>
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=Liangshan 20 Backend (2026.crina.at)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/workspace/liangshan20/server
+ExecStart=/usr/local/bin/node dist/index.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=8902
+Environment=PGHOST=127.0.0.1
+Environment=PGUSER=liangshan
+Environment=PGPASSWORD=Ls20Map_Qx7vN4mK
+Environment=PGDATABASE=liangshan
+Environment=REDIS_HOST=127.0.0.1
+Environment=REDIS_DB=12
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

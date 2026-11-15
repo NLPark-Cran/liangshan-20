@@ -10,6 +10,7 @@
  */
 
 import { drawLedgerMountain } from './scenes.js';
+import { auth, submitLedger } from './api.js';
 
 /* ────────────────────────── 参数 ────────────────────────── */
 
@@ -82,6 +83,7 @@ let S = newState();
 let canvasEl = null;
 let panelEl = null;
 let rafId = null;
+let lastSavedKey = '';
 
 /* ────────────────────────── 入口 ────────────────────────── */
 
@@ -96,6 +98,7 @@ export function openLedger() {
   panelEl = document.getElementById('ledger-panel');
   S = newState();
   S.started = true;
+  lastSavedKey = '';
   renderPanel();
   startArtLoop();
 }
@@ -412,13 +415,64 @@ function renderOver() {
     <div class="acts">
       <button class="btn btn--seal" id="lg-again">再来一次</button>
     </div>
+    <p class="ledger__hint" id="lg-save"></p>
   `;
 
   panelEl.querySelector('#lg-again')?.addEventListener('click', () => {
     S = newState();
     S.started = true;
+    lastSavedKey = '';
     renderPanel();
   });
 
+  // 每局结束提交一次，记录最好成绩；失败不影响继续玩
+  void saveRun();
+
   void gained;
+}
+
+async function saveRun() {
+  const hint = panelEl?.querySelector('#lg-save');
+  if (!hint) return;
+
+  if (!auth.ready || !auth.online) {
+    hint.textContent = '本地模式：这局只留在这台设备上。';
+    return;
+  }
+  if (!auth.user) {
+    hint.textContent = '登录后这局的成绩会存到账号里。';
+    return;
+  }
+  if (auth.user.kind !== 'member') {
+    hint.innerHTML = '<button class="ap__link" id="lg-tologin">注册账号</button>，这局的成绩就能存下来。';
+    hint.querySelector('#lg-tologin')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('auth:need-member'));
+    });
+    return;
+  }
+
+  // 同一局只提交一次
+  const key = `${S.year}:${S.cash}:${Math.round(S.mountain)}:${S.closedMineYear ?? 'x'}`;
+  if (key === lastSavedKey) return;
+  lastSavedKey = key;
+
+  hint.textContent = '正在记录…';
+  try {
+    const r = await submitLedger({
+      closedYear: S.closedMineYear,
+      finalYear: S.year,
+      finalCash: S.cash,
+      finalMountain: Math.round(S.mountain),
+      years: S.rows.map((x) => ({
+        year: x.year,
+        mode: x.mode,
+        income: x.income,
+        cash: x.cash,
+        mountain: x.mountain,
+      })),
+    });
+    hint.textContent = r.ok ? '这一局已经记到你的账号里。' : '记录没成功，不影响继续玩。';
+  } catch (_) {
+    hint.textContent = '记录没成功，不影响继续玩。';
+  }
 }

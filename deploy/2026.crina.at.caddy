@@ -9,8 +9,22 @@
 		-Server
 	}
 
-	@static_assets path_regexp \.(css|js|mjs|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|mp3|mp4|webm|wasm|json)$
+	# API 反代到后端
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8902 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# 静态资源长缓存
+	@static_assets path_regexp \.(css|js|mjs|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|mp3|mp4|webm|wasm)$
 	header @static_assets Cache-Control "public, max-age=604800"
+
+	# JSON 数据不缓存，避免更新后前端拿到旧数据
+	@json_data path_regexp \.(json)$
+	header @json_data Cache-Control "public, max-age=60, must-revalidate"
 
 	handle {
 		try_files {path} {path}/ /index.html

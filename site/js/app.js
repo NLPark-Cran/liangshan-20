@@ -16,6 +16,9 @@ import { initBirding, openBirding, closeBirding } from './birding.js';
 import { openTern, closeTern } from './tern.js';
 import { exportMap, downloadBlob } from './export.js';
 import POINTS, { SITE_COORDS } from './points.js';
+import { initAuthUI, openPanel, toast } from './auth-ui.js';
+import { initStats, openStats } from './stats-ui.js';
+import { auth } from './api.js';
 
 /* ────────────────────────── 全局状态 ────────────────────────── */
 
@@ -38,9 +41,14 @@ document.addEventListener('DOMContentLoaded', () => {
 async function init() {
   initOverlay();
   initBirding();
+  initStats();
   bindGlobalButtons();
   drawHeroArt();
   drawHeroSeal();
+
+  // 身份放在最前面：三个小游戏都要用到登录态
+  await initAuthUI();
+  bindAuthEvents();
 
   try {
     const res = await fetch('data/zhejiang.json');
@@ -54,6 +62,23 @@ async function init() {
   setTimeout(() => document.getElementById('boot')?.classList.add('is-done'), 380);
 }
 
+/** 登录态变化时，把已经开着的面板同步一下 */
+function bindAuthEvents() {
+  window.addEventListener('auth:change', () => {
+    // 观鸟手账的进度条依赖登录态，重新渲染一次
+    const birdOpen = !document.getElementById('birdlog')?.hidden;
+    if (birdOpen) {
+      // birding 模块自己会读 auth，不需要额外动作；这里只提示
+      toast('身份已更新');
+    }
+  });
+
+  // 需要注册账号时，直接弹注册面板
+  window.addEventListener('auth:need-member', () => {
+    openPanel(auth.user?.kind === 'guest' ? 'upgrade' : 'register');
+  });
+}
+
 /* ────────────────────────── 按钮 ────────────────────────── */
 
 function bindGlobalButtons() {
@@ -64,6 +89,7 @@ function bindGlobalButtons() {
   document.getElementById('btn-ledger')?.addEventListener('click', () => openLedger());
   document.getElementById('btn-birds')?.addEventListener('click', () => openBirding());
   document.getElementById('btn-tern')?.addEventListener('click', () => openTern());
+  document.getElementById('btn-stats')?.addEventListener('click', () => openStats());
 
   document.getElementById('ledger-close')?.addEventListener('click', () => closeLedger());
   document.getElementById('bird-close')?.addEventListener('click', () => closeBirding());

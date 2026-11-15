@@ -143,10 +143,17 @@ export async function exportMap(o = {}) {
 
   // 透明背景（课程要求带透明通道，所以不铺底色）
 
-  // 投影：按逻辑尺寸计算，再整体缩放
+  // 投影：按高度贴合，四周留出题名与印章的呼吸位
   const { makeMapper, computeBBox } = await import('./geo.js');
   const bbox = computeBBox(geojson, 0.035);
-  const mapper = makeMapper(bbox, { x: 0, y: 0, w: logical.w, h: logical.h }, true);
+  // 右侧留 26% 给竖排题名，上下各留 8%
+  const box = {
+    x: logical.w * 0.2,
+    y: logical.h * 0.07,
+    w: logical.w * 0.66,
+    h: logical.h * 0.86,
+  };
+  const mapper = makeMapper(bbox, box, false);
 
   // 整体放大
   ctx.save();
@@ -192,55 +199,68 @@ export async function exportMap(o = {}) {
 
     // 竖排站名
     ctx.save();
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.92;
     ctx.fillStyle = '#1c1f1d';
-    ctx.font = '600 10px "Kaiti SC", KaiTi, 楷体, serif';
+    ctx.font = '600 15px "Kaiti SC", KaiTi, 楷体, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const chars = [...p.name];
     chars.forEach((ch, k) => {
-      ctx.fillText(ch, x, y + 9 + k * 11);
+      ctx.fillText(ch, x, y + 13 + k * 17);
     });
     ctx.restore();
 
     // 序号
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.6;
     ctx.fillStyle = '#5a625b';
-    ctx.font = '7px "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.font = '9px "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(String(i + 1).padStart(2, '0'), x, y - 14);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(String(i + 1).padStart(2, '0'), x, y - 11);
     ctx.restore();
   });
 
-  // 指北
-  drawCompass(ctx, logical.w - 42, 44, { size: 28, alpha: 0.5, seed: 301 });
+  // 指北：放到右上角空白区
+  drawCompass(ctx, logical.w - 44, logical.h * 0.13, { size: 26, alpha: 0.45, seed: 301 });
 
-  // 印章
-  seal(ctx, logical.w - 52, logical.h - 46, {
-    size: 40,
-    text: '两山二十年',
+  // 印章：右下角，尺寸要放得下四个字
+  seal(ctx, logical.w - 56, logical.h - 62, {
+    size: 62,
+    text: '两山廿年',
     color: '#9d3a30',
-    alpha: 0.8,
+    alpha: 0.82,
     seed: 31,
     rotate: -0.04,
   });
 
-  // 题名
+  // 题名：左侧竖排，与地图留出空隙
   ctx.save();
-  ctx.fillStyle = 'rgba(28,31,29,0.88)';
-  ctx.font = '600 17px "Kaiti SC", KaiTi, 楷体, serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
+
+  // 主标题
+  ctx.fillStyle = 'rgba(28,31,29,0.9)';
+  ctx.font = '600 22px "Kaiti SC", KaiTi, 楷体, serif';
   const title = '两山二十年';
   [...title].forEach((ch, i) => {
-    ctx.fillText(ch, 28, 26 + i * 20);
+    ctx.fillText(ch, 34, 46 + i * 26);
   });
+
+  // 副题：再往右一列
+  ctx.fillStyle = 'rgba(90,98,91,0.7)';
   ctx.font = '9px "PingFang SC", "Microsoft YaHei", sans-serif';
-  ctx.fillStyle = 'rgba(90,98,91,0.72)';
-  const sub = '绿水青山就是金山银山 · 浙江六地';
+  const sub = '绿水青山就是金山银山';
   [...sub].forEach((ch, i) => {
-    ctx.fillText(ch, 50, 30 + i * 11.6);
+    ctx.fillText(ch, 66, 50 + i * 11.2);
+  });
+
+  // 更小的第三列：范围说明
+  ctx.fillStyle = 'rgba(141,148,138,0.72)';
+  ctx.font = '8px "PingFang SC", "Microsoft YaHei", sans-serif';
+  const sub2 = '浙江六地 · 二〇〇五—二〇二五';
+  [...sub2].forEach((ch, i) => {
+    ctx.fillText(ch, 82, 54 + i * 9.6);
   });
   ctx.restore();
 

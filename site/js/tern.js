@@ -10,6 +10,7 @@
  */
 
 import { drawTernIsland } from './tern-scene.js';
+import { auth, submitTern } from './api.js';
 
 /* ────────────────────────── 配置 ────────────────────────── */
 
@@ -76,6 +77,7 @@ let S = newGame();
 let canvasEl = null;
 let panelEl = null;
 let rafId = null;
+let lastTernKey = '';
 
 /* ────────────────────────── 入口 ────────────────────────── */
 
@@ -89,6 +91,7 @@ export function openTern() {
   canvasEl = document.getElementById('tern-canvas');
   panelEl = document.getElementById('tern-panel');
   S = newGame();
+  lastTernKey = '';
   renderPanel();
   startArtLoop();
 }
@@ -391,6 +394,7 @@ function renderEnd() {
       <div class="tern__acts">
         <button class="btn btn--seal" id="tern-again">再守五年</button>
       </div>
+      <p class="ledger__hint" id="tern-save"></p>
     </div>
   `;
 
@@ -398,4 +402,45 @@ function renderEnd() {
     S = newGame();
     renderPanel();
   });
+
+  void saveTernRun();
+}
+
+async function saveTernRun() {
+  const hint = panelEl?.querySelector('#tern-save');
+  if (!hint) return;
+
+  if (!auth.ready || !auth.online) {
+    hint.textContent = '本地模式：这五季只留在这台设备上。';
+    return;
+  }
+  if (!auth.user) {
+    hint.textContent = '登录后这次的记录会存到账号里。';
+    return;
+  }
+  if (auth.user.kind !== 'member') {
+    hint.innerHTML = '<button class="ap__link" id="tern-tologin">注册账号</button>，这次的记录就能存下来。';
+    hint.querySelector('#tern-tologin')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('auth:need-member'));
+    });
+    return;
+  }
+
+  const key = S.seasons.map((s) => `${s.round}:${s.chicks}`).join('|');
+  if (key === lastTernKey) return;
+  lastTernKey = key;
+
+  hint.textContent = '正在记录…';
+  try {
+    const r = await submitTern({ seasons: S.seasons });
+    if (r.ok) {
+      hint.textContent = r.isNewBest
+        ? `这是你的最好成绩：${r.totalChicks} 只雏鸟。`
+        : `已经记下了。你的最好成绩是 ${r.prevBest} 只。`;
+    } else {
+      hint.textContent = '记录没成功，不影响继续玩。';
+    }
+  } catch (_) {
+    hint.textContent = '记录没成功，不影响继续玩。';
+  }
 }
