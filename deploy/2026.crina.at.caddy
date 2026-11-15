@@ -1,0 +1,19 @@
+2026.crina.at {
+	root * /srv/sites/2026.crina.at
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	@static_assets path_regexp \.(css|js|mjs|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|mp3|mp4|webm|wasm|json)$
+	header @static_assets Cache-Control "public, max-age=604800"
+
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+}

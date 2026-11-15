@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4efe4">
+<title>两山二十年 · 一张可以走进去的浙江生态地图</title>
+<meta name="description" content="「绿水青山就是金山银山」提出二十年，从浙江六个地方看生态文明怎么落在具体的山水和具体的人身上。">
+<meta name="author" content="陈镜宇 · 杭州电子科技大学">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="两山二十年 · 一张可以走进去的浙江生态地图">
+<meta property="og:description" content="手卷、账本、鸟，三个尺度看同一件事。">
+<meta property="og:locale" content="zh_CN">
+
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/scroll.css">
+<link rel="stylesheet" href="css/extra.css">
+</head>
+<body>
+
+<a class="skip" href="#scroll-anchor">跳到地图</a>
+
+<!-- 加载态 -->
+<div class="boot" id="boot">
+  <div class="boot__ink" aria-hidden="true"></div>
+  <div class="boot__t">展卷</div>
+</div>
+
+<!-- ══════════════ 首屏 ══════════════ -->
+<header class="hero">
+  <canvas class="hero__bg" id="hero-bg" aria-hidden="true"></canvas>
+
+  <div class="hero__inner">
+    <div class="hero__left">
+      <p class="hero__kicker">课程实践 · 手绘数字地图</p>
+
+      <h1 class="hero__title">
+        两山<br>二十年
+      </h1>
+
+      <p class="hero__sub">一张可以走进去的浙江生态地图</p>
+
+      <p class="hero__lead">
+        <span class="hl">2005 年 8 月 15 日</span>，安吉余村。一座山被关掉了一半，
+        村里的账本从此换了一种算法。<br>
+        二十年后，浙江有六个地方可以拿来回答同一个问题：
+        <span class="hl">一座山值多少钱，要算到哪一年为止。</span>
+      </p>
+
+      <div class="hero__actions">
+        <button class="btn btn--seal" id="btn-enter">展 卷</button>
+        <button class="btn btn--ghost" id="btn-ledger">一亩山的账本</button>
+        <button class="btn btn--ghost" id="btn-birds">观鸟手账</button>
+        <button class="btn btn--ghost" id="btn-tern">等一只鸟回来</button>
+      </div>
+
+      <p class="hero__meta">
+        《习近平新时代中国特色社会主义思想概论》课程实践<br>
+        子主题 5 · 赓续伟大长征精神，建成美丽的现代化强国
+      </p>
+    </div>
+
+    <div class="hero__right" aria-hidden="true">
+      <div class="hero__verse">
+        绿水青山就是金山银山<br>
+        二十年间，山还是那座山<br>
+        算法已经换过了
+      </div>
+      <canvas class="hero__seal" id="hero-seal" aria-hidden="true"></canvas>
+    </div>
+  </div>
+
+  <div class="hero__hint">
+    <span>向下</span>
+    <svg width="16" height="22" viewBox="0 0 16 22" fill="none" aria-hidden="true">
+      <path d="M8 1v18M2 14l6 6 6-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+  </div>
+</header>
+
+<!-- ══════════════ 长卷 ══════════════ -->
+<main id="scroll-anchor">
+  <section class="scroll" id="scroll" aria-label="浙江生态长卷">
+    <div class="scroll__hintbar" id="hintbar">拖动、滚动或用方向键展卷</div>
+
+    <div class="scroll__viewport" id="scroll-viewport" tabindex="0" role="application"
+         aria-label="可展卷的浙江生态手绘地图，用左右方向键在六个点位之间移动">
+      <div class="scroll__track" id="scroll-track"></div>
+    </div>
+
+    <nav class="scroll__rail" aria-label="点位导航">
+      <div class="scroll__line" id="rail-line"></div>
+
+      <div class="scroll__tools">
+        <button class="btn btn--ghost" id="btn-prev" aria-label="上一站">
+          <span>←</span>
+        </button>
+        <button class="btn btn--ghost" id="btn-next" aria-label="下一站">
+          <span>→</span>
+        </button>
+        <button class="btn btn--ghost" id="btn-export" aria-label="导出透明 PNG">
+          <span>导出 PNG</span>
+        </button>
+      </div>
+    </nav>
+  </section>
+
+  <!-- ══════════════ 尾页：设计说明 ══════════════ -->
+  <section class="colophon" id="colophon">
+    <div class="colophon__inner">
+      <div class="colophon__block">
+        <h2>展卷说明</h2>
+        <p>
+          中国画的观看方式是手卷：不是一眼看全，而是一段一段展开。
+          这幅图沿浙江的地理从左到右排开，六站之间保留真实的方位关系，
+          拖动它们，像沿着一条路走完。
+        </p>
+        <p>
+          六个地方对应生态文明建设的六种答案：一座被关掉的矿，
+          一条重新变清的溪，一片被让出来的林子，一层层没有荒掉的田，
+          一条花了十年治回来的河，以及一块被城里人认养的菜地。
+        </p>
+      </div>
+
+      <div class="colophon__block">
+        <h2>三个尺度</h2>
+        <h3>一 · 长卷 · 空间</h3>
+        <p>
+          一条横轴走完六个地方，看浙江做了什么。数据都标了出处，
+          能核到年份，核不到的会写明。
+        </p>
+
+        <h3>二 · 一亩山的账本 · 二十年</h3>
+        <p>
+          一座山从开矿到关矿再到复绿，中间那十几年最难。
+          这个推演把「关矿」做成一个不可逆的选择，让玩家自己扛一次当年那次掉下去。
+          参数是示意，不是真实账目。
+        </p>
+
+        <h3>三 · 鸟 · 一年一季</h3>
+        <p>
+          观鸟手账按真实地点和观测时间组织，稀有度取自真实记录频率。
+          台风过后偶尔会捞到不该出现的海鸟，这在观鸟圈里是真实的事。
+        </p>
+        <p>
+          「等一只鸟回来」讲的是另一种时间：中华凤头燕鸥在浙江的招引，
+          是人把假鸟和声音放上礁石，然后年年回去看它来不来。
+        </p>
+      </div>
+
+      <div class="colophon__block">
+        <h2>资料来源</h2>
+        <ul class="srclist" id="srclist">
+          <li>资料来源正在整理，见 docs/research/ 目录下的核实记录。</li>
+        </ul>
+      </div>
+
+      <div class="colophon__block">
+        <h2>制作说明</h2>
+        <p>
+          地图、交互与视觉渲染由编程实现；选题立意、资料核实与文字表述由本人完成。
+          全部数据标注来源，凡未能核实的数字均不写入正文。
+        </p>
+      </div>
+
+      <p class="footnote">
+        杭州电子科技大学 · 外国语学院 · 陈镜宇<br>
+        《习近平新时代中国特色社会主义思想概论》（2026-2027-1）课程实践作业<br>
+        子主题 5 · 赓续伟大长征精神，建成美丽的现代化强国
+      </p>
+    </div>
+  </section>
+</main>
+
+<!-- ══════════════ 点位详情覆盖层 ══════════════ -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlay-title" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb" id="overlay-crumb">第一站</span>
+    <button class="overlay__close" id="overlay-close">
+      收起 <span aria-hidden="true">✕</span>
+    </button>
+  </div>
+  <div class="overlay__body" id="overlay-body"></div>
+</div>
+
+<!-- ══════════════ 账本覆盖层 ══════════════ -->
+<div class="overlay" id="ledgerlog" role="dialog" aria-modal="true" aria-label="一亩山的账本" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb">一亩山的账本 · 推演</span>
+    <button class="overlay__close" id="ledger-close">
+      收起 <span aria-hidden="true">✕</span>
+    </button>
+  </div>
+  <div class="overlay__body">
+    <div class="ledger">
+      <div class="ledger__stage"><canvas id="ledger-canvas"></canvas></div>
+      <div class="ledger__panel" id="ledger-panel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ 观鸟手账覆盖层 ══════════════ -->
+<div class="overlay" id="birdlog" role="dialog" aria-modal="true" aria-label="观鸟观测手账" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb">观鸟观测手账</span>
+    <button class="overlay__close" id="bird-close">
+      收起 <span aria-hidden="true">✕</span>
+    </button>
+  </div>
+  <div class="overlay__body">
+    <div id="bird-panel"></div>
+  </div>
+</div>
+
+<!-- ══════════════ 燕鸥覆盖层 ══════════════ -->
+<div class="overlay" id="ternlog" role="dialog" aria-modal="true" aria-label="等一只鸟回来" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb">等一只鸟回来 · 燕鸥招引推演</span>
+    <button class="overlay__close" id="tern-close">
+      收起 <span aria-hidden="true">✕</span>
+    </button>
+  </div>
+  <div class="overlay__body">
+    <div class="ledger">
+      <div class="ledger__stage"><canvas id="tern-canvas"></canvas></div>
+      <div class="ledger__panel" id="tern-panel"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
