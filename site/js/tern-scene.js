@@ -100,33 +100,41 @@ export function drawTernIsland(canvas, s = {}) {
   if (island) {
     const drawIslandShape = () => {
       if (island === 'reef') {
-        // 高耸礁岩
+        // 海蚀礁岩：顶部平缓，肩部圆钝，像被浪啃过的石头，不是山峰
         return [
-          [w * 0.28, seaY + 3],
-          [w * 0.34, h * 0.36],
-          [w * 0.44, h * 0.3],
-          [w * 0.54, h * 0.4],
-          [w * 0.62, h * 0.34],
-          [w * 0.7, seaY + 3],
+          [w * 0.26, seaY + 4],
+          [w * 0.3, h * 0.52],
+          [w * 0.33, h * 0.4],
+          [w * 0.38, h * 0.34],
+          [w * 0.44, h * 0.32],
+          [w * 0.5, h * 0.33],
+          [w * 0.56, h * 0.36],
+          [w * 0.61, h * 0.42],
+          [w * 0.65, h * 0.5],
+          [w * 0.68, h * 0.58],
+          [w * 0.72, seaY + 4],
         ];
       }
       if (island === 'sandbar') {
-        // 低平沙洲
+        // 低平沙洲：几乎贴着水面
         return [
-          [w * 0.2, seaY + 8],
-          [w * 0.34, seaY - 4],
-          [w * 0.52, seaY - 10],
-          [w * 0.7, seaY - 2],
-          [w * 0.82, seaY + 8],
+          [w * 0.18, seaY + 10],
+          [w * 0.27, seaY + 1],
+          [w * 0.39, seaY - 3],
+          [w * 0.5, seaY - 5],
+          [w * 0.62, seaY - 3],
+          [w * 0.74, seaY + 2],
+          [w * 0.84, seaY + 10],
         ];
       }
-      // 鱼塘埂
+      // 鱼塘埂：极窄的一条，两侧是水
       return [
-        [w * 0.16, seaY + 14],
-        [w * 0.36, seaY + 4],
-        [w * 0.58, seaY + 8],
-        [w * 0.8, seaY + 2],
-        [w * 0.86, seaY + 16],
+        [w * 0.14, seaY + 16],
+        [w * 0.3, seaY + 8],
+        [w * 0.45, seaY + 6],
+        [w * 0.6, seaY + 7],
+        [w * 0.78, seaY + 4],
+        [w * 0.88, seaY + 16],
       ];
     };
 
@@ -151,18 +159,48 @@ export function drawTernIsland(canvas, s = {}) {
       layers: 2,
     });
 
-    // 礁石细节
+    // 礁石细节：沿岩壁的横向岩层线
     if (island === 'reef') {
-      rockCluster(ctx, w * 0.44, h * 0.44, { w: w * 0.12, h: h * 0.05, seed: 4413, alpha: 0.42 });
-      rockCluster(ctx, w * 0.56, h * 0.48, { w: w * 0.09, h: h * 0.04, seed: 4415, alpha: 0.34 });
+      for (let i = 0; i < 5; i++) {
+        const y = h * (0.4 + i * 0.045);
+        const halfW = w * (0.09 + i * 0.018);
+        inkStroke(
+          ctx,
+          [
+            [w * 0.45 - halfW, y],
+            [w * 0.45, y + (i % 2 ? 1.5 : -1.5)],
+            [w * 0.45 + halfW * 0.9, y + 1],
+          ],
+          {
+            color: '#5a625b',
+            width: 0.9,
+            alpha: 0.26,
+            seed: 4413 + i * 7,
+            wobble: 0.5,
+            dry: 0.3,
+            layers: 1,
+            taper: false,
+          }
+        );
+      }
+      // 岩石竖向裂痕
+      inkStroke(
+        ctx,
+        [
+          [w * 0.42, h * 0.35],
+          [w * 0.41, h * 0.46],
+          [w * 0.43, h * 0.56],
+        ],
+        { color: '#5a625b', width: 0.8, alpha: 0.24, seed: 4451, layers: 1, dry: 0.34 }
+      );
     }
 
-    // 假鸟
+    // 假鸟：站在岛的平顶上
     const decoyCount = decoy === 'few' ? 3 : decoy === 'mid' ? 12 : decoy === 'many' ? 28 : 0;
     for (let i = 0; i < decoyCount; i++) {
       const r2 = mulberry32(4500 + i * 13);
-      const px = w * 0.3 + r2() * w * 0.38;
-      const py = h * 0.36 + r2() * h * 0.2;
+      const px = w * 0.34 + r2() * w * 0.34;
+      const py = h * 0.32 + r2() * h * 0.06;
       drawTernGlyph(ctx, px, py, 0.5, '#8d948a', 0.55);
     }
 
@@ -176,13 +214,13 @@ export function drawTernIsland(canvas, s = {}) {
         let px;
         let py;
         if (onGround) {
-          px = w * 0.3 + r3() * w * 0.38;
-          py = h * 0.35 + r3() * h * 0.2;
+          px = w * 0.34 + r3() * w * 0.34;
+          py = h * 0.32 + r3() * h * 0.07;
         } else {
           const ang = r3() * Math.PI * 2 + t * 0.28;
           const rad = w * (0.16 + r3() * 0.24);
           px = w * 0.46 + Math.cos(ang) * rad;
-          py = h * 0.32 + Math.sin(ang) * rad * 0.42;
+          py = h * 0.26 + Math.sin(ang) * rad * 0.42;
         }
         drawTernGlyph(ctx, px, py, 0.72 + r3() * 0.34, '#3a3f38', 0.5 + r3() * 0.4);
       }

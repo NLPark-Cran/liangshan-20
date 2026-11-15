@@ -592,6 +592,12 @@
   letter-spacing: 0.06em;
 }
 
+.tern__tip--flow {
+  margin-top: var(--s4);
+  line-height: 1.8;
+  max-width: 32em;
+}
+
 .tern__result {
   margin-top: var(--s6);
 }

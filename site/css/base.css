@@ -185,6 +185,61 @@ em {
   margin-inline: auto;
 }
 
+/* ── 排行榜 ─────────────────────────────────────────── */
+
+.rank {
+  display: grid;
+  gap: var(--s8);
+}
+
+.rank__sec h3 {
+  font-family: var(--font-kai);
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid rgba(195, 198, 189, 0.8);
+  margin-bottom: var(--s3);
+}
+
+.rank__row {
+  display: grid;
+  grid-template-columns: 2em minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: 0.42rem 0;
+  border-bottom: 1px dotted rgba(195, 198, 189, 0.7);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+}
+
+.rank__i {
+  color: var(--ink-300);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank__n {
+  color: var(--ink-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank__v {
+  color: var(--ink-900);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank__empty {
+  padding: var(--s3) 0;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--ink-300);
+  letter-spacing: 0.06em;
+  line-height: 1.9;
+}
+
 /* 焦点可见 */
 :focus-visible {
   outline: 2px solid var(--cinnabar);

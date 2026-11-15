@@ -11,19 +11,23 @@
 ## 一、恢复锚点
 
 ```
-当前阶段：Phase 5 · 交付与部署（已上线，视觉打磨中）
-最后完成：站点部署到 2026.crina.at，HTTPS 证书自动签发成功
-正在做：周念重做六幅水墨场景；五路调研待回收
-下一步：① 收周念的视觉成果 ② 填实 points.js 数据 ③ 截图验收全站 ④ 推 GitHub
+当前阶段：Phase 6 · 全栈化（后端已上线，前端未完全接入）
+最后完成：Hono + TypeScript 后端部署完成，游客/注册/登录/抽签/存档/排行全部跑通
+正在做：把账本与燕鸥的成绩提交接到后端；补视觉打磨
+下一步：① 验证三处提交在浏览器里真的触发 ② 周念重做水墨场景 ③ 调研回收后填数据
 ```
 
 **已完成的关键事实**
 
 - 线上地址 https://2026.crina.at 可访问，HTTP 200，证书有效
 - 站点根目录 `/srv/sites/2026.crina.at`，属主 caddy:caddy
-- Caddy 配置 `/etc/caddy/sites.d/2026.crina.at.caddy`
+- Caddy 配置 `/etc/caddy/sites.d/2026.crina.at.caddy`，`/api/*` 反代到 127.0.0.1:8902
 - 本地开发服务跑在 http://127.0.0.1:8124/（tools/serve.py）
-- GitHub 仓库 https://github.com/NLPark-Cran/liangshan-20 已建并推送，分支 main
+- GitHub 仓库 https://github.com/NLPark-Cran/liangshan-20
+- **后端**：systemd 服务 `liangshan-backend`，源码 `/root/workspace/liangshan20/server`
+- **数据库**：PostgreSQL 17，库名 `liangshan`，用户 `liangshan`
+- **会话**：Redis db 12
+- 健康检查 https://2026.crina.at/api/health 返回 db/redis 均 ok
 
 **已修掉的 bug（不要再犯）**
 

@@ -210,6 +210,10 @@ function renderSetup() {
         </button>
         ${!canGo ? '<span class="tern__tip">三样都选好才能开始</span>' : ''}
       </div>
+
+      <p class="tern__tip tern__tip--flow">
+        上一季的选择会留着。想换，点一下已选中的项取消，再选别的。
+      </p>
     </div>
   `;
 
