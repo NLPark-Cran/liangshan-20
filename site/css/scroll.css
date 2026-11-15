@@ -781,6 +781,17 @@
   line-height: 1.6;
 }
 
+.stat__src {
+  grid-column: 1 / -1;
+  margin-top: 0.1rem;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  color: var(--ink-300);
+  opacity: 0.72;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
 /* 前后导航 */
 .site__nav {
   display: flex;

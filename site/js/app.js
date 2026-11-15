@@ -18,7 +18,7 @@ import { exportMap, downloadBlob } from './export.js';
 import POINTS, { SITE_COORDS } from './points.js';
 import { initAuthUI, openPanel, toast } from './auth-ui.js';
 import { initStats, openStats } from './stats-ui.js';
-import { auth } from './api.js';
+import { auth, track } from './api.js';
 
 /* ────────────────────────── 全局状态 ────────────────────────── */
 
@@ -86,10 +86,22 @@ function bindGlobalButtons() {
     document.getElementById('scroll-anchor')?.scrollIntoView({ behavior: 'smooth' });
   });
 
-  document.getElementById('btn-ledger')?.addEventListener('click', () => openLedger());
-  document.getElementById('btn-birds')?.addEventListener('click', () => openBirding());
-  document.getElementById('btn-tern')?.addEventListener('click', () => openTern());
-  document.getElementById('btn-stats')?.addEventListener('click', () => openStats());
+  document.getElementById('btn-ledger')?.addEventListener('click', () => {
+    track('open:ledger');
+    openLedger();
+  });
+  document.getElementById('btn-birds')?.addEventListener('click', () => {
+    track('open:birds');
+    openBirding();
+  });
+  document.getElementById('btn-tern')?.addEventListener('click', () => {
+    track('open:tern');
+    openTern();
+  });
+  document.getElementById('btn-stats')?.addEventListener('click', () => {
+    track('open:stats');
+    openStats();
+  });
 
   document.getElementById('ledger-close')?.addEventListener('click', () => closeLedger());
   document.getElementById('bird-close')?.addEventListener('click', () => closeBirding());
@@ -113,6 +125,9 @@ function bindGlobalButtons() {
     openSite(POINTS[next], next, POINTS.length);
     state.scroll?.focusIndex(next + 1, true);
   });
+
+  // 导出时记一次，看看有多少人真的拿走了图
+  document.getElementById('btn-export')?.addEventListener('click', () => track('export:png'), { once: true });
 }
 
 /* ────────────────────────── 首屏装饰 ────────────────────────── */

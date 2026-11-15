@@ -24,6 +24,7 @@ import {
   myStats,
   leaderboard,
   publicSites,
+  track,
 } from './api.js';
 
 const app = new Hono();
@@ -81,6 +82,7 @@ app.post('/api/tern/submit', submitTern);
 app.get('/api/stats/mine', myStats);
 app.get('/api/leaderboard', leaderboard);
 app.get('/api/sites', publicSites);
+app.post('/api/track', track);
 
 /* ────────────────────────── 启停 ────────────────────────── */
 

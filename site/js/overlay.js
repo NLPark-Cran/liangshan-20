@@ -151,6 +151,7 @@ function renderSiteHTML(p, index, total) {
         <span class="stat__k">${esc(d.k)}</span>
         <span class="stat__v">${esc(d.v)}${d.unit ? `<small>${esc(d.unit)}</small>` : ''}</span>
         ${d.note ? `<span class="stat__note">${esc(d.note)}</span>` : ''}
+        ${d.source ? `<span class="stat__src">来源 · ${esc(d.source)}</span>` : ''}
       </div>`
     )
     .join('');

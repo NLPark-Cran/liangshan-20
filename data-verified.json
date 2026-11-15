@@ -1,0 +1,136 @@
+{
+  "_meta": {
+    "verifiedAt": "2026-11-16",
+    "note": "只收录能在官方或党报来源中逐字核对的数据；未能核实的不写入。",
+    "correction": "云和梯田并非全球重要农业文化遗产（GIAHS）。按 FAO/湖州市农业农村局 2025 年名录与中国农业农村部名单，云和梯田农业系统只有「中国重要农业文化遗产」一项，2025 年前仍在申报 GIAHS。"
+  },
+  "yucun": {
+    "incomeBefore": {
+      "value": "300 余万元（20 世纪 90 年代末峰值，安吉县首富村）",
+      "year": "1990s末",
+      "source": "人民日报《余村潘家兄弟二十年》2025-08-14",
+      "url": "http://politics.people.com.cn/n1/2025/0814/c1001-40541925.html",
+      "confidence": "high"
+    },
+    "incomeAfter": {
+      "value": "20 余万元（鲍新民回忆「最少时减少到 21 万元」）",
+      "year": "2004",
+      "source": "求是《深度调研丨余村调查》2025-11（宣讲家网转载）；北京组工《习近平叮嘱我们护好绿水青山》",
+      "url": "http://www.71.cn/2025/1117/1277402.shtml",
+      "confidence": "high"
+    },
+    "incomePerCapita2024": {
+      "value": "7.4 万元",
+      "year": "2024",
+      "source": "经济日报《青年人成了乡村带头人》2025-01-15",
+      "url": "http://paper.ce.cn/pc/content/202501/15/content_307628.html",
+      "confidence": "high"
+    },
+    "collectiveIncome2024": {
+      "value": "2205 万元（其中经营性收入 1131 万元）",
+      "year": "2024",
+      "source": "经济日报 2025-01-15；求是《深度调研丨余村调查》2025-11",
+      "url": "http://paper.ce.cn/pc/content/202501/15/content_307628.html",
+      "confidence": "high"
+    },
+    "minesShut": {
+      "value": "3 座矿山、1 家水泥厂（2003 年表决分两步关停，2005 年 3 月底全部关停）",
+      "year": "2003-2005",
+      "source": "人民日报 2025-08-14；求是《深度调研丨余村调查》2025-11",
+      "url": "http://politics.people.com.cn/n1/2025/0814/c1001-40541925.html",
+      "confidence": "high"
+    }
+  },
+  "xiajiang": {
+    "incomePerCapita2024": {
+      "value": "54931 元",
+      "year": "2024",
+      "source": "致公党杭州市委会《上城基层委赴建德、淳安开展乡村振兴调研》2025-06-06",
+      "url": "http://www.hzzg.gov.cn/art/2025/6/6/art_1229712688_9835.html",
+      "confidence": "medium"
+    },
+    "collectiveOperating2023": {
+      "value": "134.40 万元（村集体经济总收入 207.65 万元）",
+      "year": "2023",
+      "source": "杭州日报《杭州山海协作助山区县成「进步生」》2024-12-19",
+      "url": "https://hznews.hangzhou.com.cn/chengshi/content/2024-12/19/content_8827942.htm",
+      "confidence": "medium"
+    },
+    "incomePerCapita2023": {
+      "value": "52067 元",
+      "year": "2023",
+      "source": "杭州日报 2024-12-19（同期多篇报道一致）",
+      "url": "https://hznews.hangzhou.com.cn/chengshi/content/2024-12/19/content_8827942.htm",
+      "confidence": "medium"
+    }
+  },
+  "yunhe": {
+    "chinaHeritageYear": {
+      "value": "2015 年 10 月 10 日，农业部第三批中国重要农业文化遗产（「浙江云和梯田农业系统」入选）",
+      "year": "2015",
+      "source": "农村信息报《浙江省农业文化遗产保护大事记》2022-07-16",
+      "url": "http://www.ncxxb.com.cn/h5/html5/2022-07/16/content_138409_15053586.htm",
+      "confidence": "high"
+    },
+    "giahs": {
+      "value": "未获 GIAHS 认定。丽水现有 2 项全球重要农业文化遗产（青田稻鱼共生、庆元林-菇共育），云和梯田不在其中，官方表述为「支持云和梯田申报全球重要农业遗产」",
+      "year": "截至 2025",
+      "source": "湖州市农业农村局《全球重要农业文化遗产名录》2025；丽水市农业农村局文件",
+      "url": "https://nync.huzhou.gov.cn/ztzl/hzsnywhyczy/qqzynywhycml/art/2025/art_1847303836.html",
+      "confidence": "high"
+    },
+    "altitudeAndArea": {
+      "value": "海拔 200 米至 1400 多米（垂直高度 1200 多米），梯田群总面积 51 平方公里，有 700 多层",
+      "year": "现行公开口径",
+      "source": "丽水网《云和梯田景区》（来源：丽水文旅资料）；中国网图片报道 2024-04",
+      "url": "https://www.lsnews.com.cn/news/geo/e/wl-jq-003.html",
+      "confidence": "high"
+    },
+    "rating5A": {
+      "value": "国家 5A 级旅游景区，全国首个梯田型 5A 景区（入列日期 2024 年 2 月 6 日待确认）",
+      "year": "2024（待确认）",
+      "source": "丽水网《云和梯田景区》（该页只标注 5A 与全国首个梯田型 5A，未列批复日期）",
+      "url": "https://www.lsnews.com.cn/news/geo/e/wl-jq-003.html",
+      "confidence": "high"
+    }
+  },
+  "qianjiangyuan": {
+    "pilotYear": {
+      "value": "2015 年 1 月纳入全国 9 省市试点，2016 年 6 月 17 日国家发改委批复《试点实施方案》，2016 年 7 月 14 日通报启动；试点区面积约 252 平方公里",
+      "year": "2016",
+      "source": "开化县人民政府《钱江源国家公园体制试点》2016-07-15",
+      "url": "https://www.kaihua.gov.cn/art/2016/7/15/art_1229550456_59009830.html",
+      "confidence": "high"
+    },
+    "status": {
+      "value": "尚未正式设立，仍为「钱江源—百山祖国家公园候选区」。2016 年成为体制试点，2020 年形成「一园两区」，2023 年设立材料通过国家林草局专家论证，2026 年 7 月官方仍称「候选区」「现基本完成创建前期工作」",
+      "year": "截至 2026-07",
+      "source": "庆元县融媒体《国家公园综合业务培训班在庆元开班》2026-07-11",
+      "url": "https://www.zgqy.zj.cn/xinwen/202607/t20260711_7547098.shtml",
+      "confidence": "high"
+    },
+    "forestCoverage": {
+      "value": "80.7%（另有 2024 年报道为 80.96%）",
+      "year": "2016（80.7%）/ 2024（80.96%）",
+      "source": "开化县人民政府 2016-07-15；经济网《「华东绿肺」要建国家公园城市》2024-06-27",
+      "url": "https://www.kaihua.gov.cn/art/2016/7/15/art_1229550456_59009830.html",
+      "confidence": "high"
+    }
+  },
+  "pujiang": {
+    "workshopsClosed": {
+      "value": "关停水晶加工户约 1.8 万多家（高峰时全县 2.2 万家作坊、20 万人从业；官方另有「关停低小散加工户 2 万余家」口径），保留约 1300 家企业集中入园治污",
+      "year": "2013 年起",
+      "source": "人民网《重访浙江浦江水晶发源地：「五水共治」重寻青山绿水美景》2015-06-10；中国环境新闻网 2024-11-06",
+      "url": "http://politics.people.com.cn/n/2015/0610/c70731-27132462.html",
+      "confidence": "high"
+    },
+    "waterQuality": {
+      "value": "浦阳江水质由劣Ⅴ类改善至Ⅲ类及以上（治理前流域 37 条河流中 22 条为劣Ⅴ类；全县 51 条支流水质全部达到或优于Ⅲ类）。「连续 8 年劣Ⅴ类」一说本批归档未见原文表述（待确认）",
+      "year": "2013-2016 至今",
+      "source": "中国环境新闻网《金华浦江消除黑臭水体》2024-11-06",
+      "url": "http://www.cfej.net/hbyq/yqjc/202411/t20241106_1093600.shtml",
+      "confidence": "high"
+    }
+  }
+}

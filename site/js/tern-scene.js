@@ -61,6 +61,35 @@ export function drawTernIsland(canvas, s = {}) {
   // 云
   mistBand(ctx, { x: 0, y: 0, w, h: skyH * 0.9 }, { alpha: 0.5, seed: 4401, bands: 3 });
 
+  // 远岛：海平线上几点淡影，把空间推开
+  {
+    const farRnd = mulberry32(4409);
+    for (let i = 0; i < 2; i++) {
+      const bx = w * (0.08 + farRnd() * 0.84);
+      const bw = w * (0.09 + farRnd() * 0.1);
+      const bh = h * (0.012 + farRnd() * 0.016);
+      inkStroke(
+        ctx,
+        [
+          [bx - bw, h * 0.585],
+          [bx - bw * 0.45, h * 0.585 - bh],
+          [bx + bw * 0.1, h * 0.585 - bh * 0.7],
+          [bx + bw, h * 0.585],
+        ],
+        {
+          color: '#5a625b',
+          width: 1,
+          alpha: 0.24,
+          seed: 4421 + i * 11,
+          wobble: 0.7,
+          dry: 0.2,
+          layers: 1,
+          taper: false,
+        }
+      );
+    }
+  }
+
   // 海
   const seaY = h * 0.62;
   const sea = ctx.createLinearGradient(0, seaY, 0, h);
@@ -69,6 +98,16 @@ export function drawTernIsland(canvas, s = {}) {
   sea.addColorStop(1, hexA('#6d8f8a', 0.06));
   ctx.fillStyle = sea;
   ctx.fillRect(0, seaY, w, h - seaY);
+
+  // 海平线一条极淡的横线
+  inkStroke(
+    ctx,
+    [
+      [0, seaY],
+      [w, seaY],
+    ],
+    { color: '#6d8f8a', width: 0.8, alpha: 0.18, seed: 4407, layers: 1, dry: 0.42, taper: false }
+  );
 
   // 波纹：随 t 缓慢移动
   const rnd = mulberry32(4403);

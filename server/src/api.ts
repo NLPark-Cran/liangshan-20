@@ -412,3 +412,35 @@ export function publicSites(c: Context) {
   }));
   return c.json({ ok: true, sites });
 }
+
+/** 轻量埋点：记录打开与玩过什么，用于了解哪块内容被看得多 */
+const TRACK_WHITELIST = new Set([
+  'open:ledger',
+  'open:birds',
+  'open:tern',
+  'open:stats',
+  'open:site',
+  'export:png',
+  'scroll:end',
+]);
+
+export async function track(c: Context) {
+  const user = c.get('user') as AuthUser | undefined;
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ ok: false }, 400);
+
+  const event = String(body.event ?? '');
+  if (!TRACK_WHITELIST.has(event)) return c.json({ ok: false, error: 'unknown_event' }, 400);
+
+  const detail =
+    body.detail && typeof body.detail === 'object'
+      ? JSON.stringify(body.detail).slice(0, 400)
+      : null;
+
+  await pool.query(
+    'INSERT INTO events (user_id, event, detail) VALUES ($1, $2, $3::jsonb)',
+    [user?.id ?? null, event, detail]
+  );
+
+  return c.json({ ok: true });
+}

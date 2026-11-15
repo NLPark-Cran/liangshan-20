@@ -46,6 +46,22 @@ export async function checkHealth() {
   }
 }
 
+/** 轻量埋点：失败就算了，绝不打扰用户 */
+export function track(event, detail) {
+  if (!auth.online) return;
+  try {
+    fetch(BASE + '/track', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: String(event).slice(0, 40), detail: detail ?? null }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) {
+    /* 忽略 */
+  }
+}
+
 /* ────────────────────────── 认证 ────────────────────────── */
 
 export async function fetchMe() {

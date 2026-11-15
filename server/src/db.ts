@@ -78,6 +78,17 @@ export async function migrate(): Promise<void> {
   );
 
   CREATE INDEX IF NOT EXISTS tern_runs_user_idx ON tern_runs (user_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS events (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    event      TEXT NOT NULL,
+    detail     JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
+  CREATE INDEX IF NOT EXISTS events_event_idx ON events (event, created_at DESC);
+  CREATE INDEX IF NOT EXISTS events_created_idx ON events (created_at DESC);
   `;
 
   await pool.query(sql);
