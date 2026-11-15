@@ -120,6 +120,7 @@ export function mass(ctx, o = {}) {
     amp,
     knots,
     footY = baseY + amp * 1.5,
+    span = null,
     tone = '#7c9160',
     toneAlpha = 0.15,
     lineColor = '#2b2f2b',
@@ -135,60 +136,142 @@ export function mass(ctx, o = {}) {
     seed = 1,
     footFade = 0,
     shade = null,
+    band = 0.1,
+    veins = 0,
+    veinDepth = 0.5,
+    inner = 0,
   } = o;
 
-  const pts = profilePts(knots, vw, baseY, amp, 150);
+  /* 只在 span 这一段里取点：山外的部分不该被填成一条横带 */
+  const tA = span ? Math.max(0, span[0]) : 0;
+  const tB = span ? Math.min(1, span[1]) : 1;
+  /* 剖面已是密点列时直接使用：再插值一次会把峰肩的转折磨圆 */
+  const dense = knots.length > 60 ? knots : sampleProfile(knots, 420);
+  const pts = [];
+  for (const [t, hh] of dense) {
+    if (t < tA - 1e-6 || t > tB + 1e-6) continue;
+    pts.push([vw * t, baseY - hh * amp]);
+  }
+  if (pts.length < 3) return;
+
   const rnd = mulberry32(seed);
+  const x0 = pts[0][0];
+  const x1 = pts[pts.length - 1][0];
+
+  /** 山体轮廓（脊线 + 山脚）。两端各带一段斜翼，
+   *  免得脊线落到零高度时补出一条竖直硬边。 */
+  const tail = Math.max(10, amp * 0.28);
+  const outlinePath = () => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.lineTo(pts[pts.length - 1][0] + tail, footY);
+    ctx.lineTo(pts[0][0] - tail, footY);
+    ctx.closePath();
+  };
 
   /* 块面 */
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-  ctx.lineTo(pts[pts.length - 1][0], footY);
-  ctx.lineTo(pts[0][0], footY);
-  ctx.closePath();
+  outlinePath();
   const g = ctx.createLinearGradient(0, baseY - amp, 0, footY);
-  g.addColorStop(0, hexA(tone, toneAlpha * 1.5));
-  g.addColorStop(0.3, hexA(tone, toneAlpha * 0.95));
-  g.addColorStop(0.66, hexA(tone, toneAlpha * 0.5));
-  g.addColorStop(1, hexA(tone, toneAlpha * 0.06));
+  g.addColorStop(0, hexA(tone, toneAlpha * 1.35));
+  g.addColorStop(0.3, hexA(tone, toneAlpha * 0.8));
+  g.addColorStop(0.7, hexA(tone, toneAlpha * 0.38));
+  g.addColorStop(1, hexA(tone, toneAlpha * 0.05));
   ctx.fillStyle = g;
   ctx.fill();
   ctx.restore();
+
+  /* 脊下一条窄带压深：脊重坡淡，块面才有分界 */
+  if (band > 0) {
+    ctx.save();
+    outlinePath();
+    ctx.clip();
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    for (let i = pts.length - 1; i >= 0; i--) {
+      ctx.lineTo(pts[i][0], pts[i][1] + amp * band * (0.6 + 0.8 * (i / pts.length)));
+    }
+    ctx.closePath();
+    ctx.fillStyle = hexA(tone, toneAlpha * 1.6);
+    ctx.fill();
+    ctx.restore();
+  }
 
   /* 阴面：一侧压深，山才有体积 */
   if (shade) {
     const [t0, t1, amt] = shade;
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.lineTo(pts[pts.length - 1][0], footY);
-    ctx.lineTo(pts[0][0], footY);
-    ctx.closePath();
+    outlinePath();
     ctx.clip();
-    const x0 = vw * t0;
-    const x1 = vw * t1;
-    const sg = ctx.createLinearGradient(x0, 0, x1, 0);
+    const sx0 = vw * t0;
+    const sx1 = vw * t1;
+    const sg = ctx.createLinearGradient(sx0, 0, sx1, 0);
     sg.addColorStop(0, hexA(lineColor, amt));
     sg.addColorStop(1, hexA(lineColor, 0));
     ctx.fillStyle = sg;
-    const top = baseY - amp * 1.1;
-    ctx.fillRect(x0 - (x1 - x0) * 0.2, top, (x1 - x0) * 1.4, footY - top);
+    const top = baseY - amp * 1.15;
+    ctx.fillRect(Math.min(sx0, sx1) - Math.abs(sx1 - sx0) * 0.25, top, Math.abs(sx1 - sx0) * 1.5, footY - top);
     ctx.restore();
   }
 
-  /* 脊线：分段，各有浓淡 */
-  const segs = 16;
+  /* 分脉：从峰脊拉下来的几道石纹，把整块山劈开 */
+  if (veins > 0) {
+    let topI = 0;
+    for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
+    for (let v = 0; v < veins; v++) {
+      const side = v % 2 === 0 ? 1 : -1;
+      let start = topI + side * Math.round((0.04 + rnd() * 0.09) * pts.length);
+      start = Math.max(1, Math.min(pts.length - 2, start));
+      const p0 = pts[start];
+      const depth = amp * veinDepth * (0.45 + rnd() * 0.75);
+      const drift = side * amp * (0.12 + rnd() * 0.3);
+      const path = [];
+      for (let i = 0; i <= 6; i++) {
+        const u = i / 6;
+        path.push([
+          p0[0] + drift * u * u + (rnd() - 0.5) * 3,
+          p0[1] + depth * u + (rnd() - 0.5) * 2,
+        ]);
+      }
+      inkStroke(ctx, path, {
+        color: lineColor,
+        width: Math.max(0.8, lineWidth * 0.6),
+        alpha: lineAlpha * 0.5 * (0.6 + rnd() * 0.5),
+        seed: seed + 700 + v * 23,
+        wobble: 1.2,
+        jitter: 0.3,
+        dry: 0.42,
+        layers: 1,
+        taper: false,
+        step: 4,
+      });
+    }
+  }
+
+  /* 脊线：fade 按山自身这一段算（0 = 左端，1 = 右端）。
+   * 按整幅坐标算会错位：山只占画幅一段，查表出来的浓淡是另一段的。 */
+  const taperL = tA > 0.004;
+  const taperR = tB < 0.996;
+  const endTaper = (u) => {
+    let f = 1;
+    if (taperL && u < 0.1) f *= 0.2 + 0.8 * (u / 0.1);
+    if (taperR && u > 0.9) f *= 0.2 + 0.8 * ((1 - u) / 0.1);
+    return Math.max(0.03, f);
+  };
+  const segs = 24;
   for (let k = 0; k < segs; k++) {
     const i0 = Math.floor(((pts.length - 1) * k) / segs);
     const i1 = Math.min(pts.length - 1, Math.floor(((pts.length - 1) * (k + 1)) / segs) + 2);
-    const a = lineAlpha * fadeAt((k + 0.5) / segs, fade);
+    const u = (k + 0.5) / segs;
+    const f = fadeAt(u, fade);
+    const a = lineAlpha * f * endTaper(u);
     if (a < 0.015) continue;
     inkStroke(ctx, pts.slice(i0, i1 + 1), {
       color: lineColor,
-      width: lineWidth * (0.85 + 0.3 * fadeAt((k + 0.5) / segs, fade)),
+      // 脊上最重，两端最轻：一笔的重量落在山脊上
+      width: lineWidth * (0.72 + 0.5 * f * endTaper(u)),
       alpha: a,
       seed: seed + k * 17,
       wobble: Math.max(0.5, lineWidth * 0.55),
@@ -200,36 +283,70 @@ export function mass(ctx, o = {}) {
     });
   }
 
-  /* 皴：成组，不匀撒 */
+  /* 内轮廓：沿峰的两侧各压一道短脊，山才有厚度，不是一张剪影 */
+  if (inner > 0) {
+    let topI = 0;
+    for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
+    for (let side = -1; side <= 1; side += 2) {
+      const a0 = Math.max(0, Math.min(pts.length - 1, topI + side * Math.round(pts.length * 0.02)));
+      const len = Math.round(pts.length * (0.12 + rnd() * 0.1));
+      const seg = [];
+      for (let i = 0; i <= len; i += 3) {
+        const idx = Math.max(0, Math.min(pts.length - 1, a0 + side * i));
+        const p = pts[idx];
+        const drop = amp * inner * Math.sin((i / len) * Math.PI * 0.9);
+        seg.push([p[0], p[1] + drop + 1]);
+      }
+      if (seg.length < 2) continue;
+      inkStroke(ctx, seg, {
+        color: lineColor,
+        width: Math.max(0.9, lineWidth * 0.62),
+        alpha: lineAlpha * 0.5,
+        seed: seed + 880 + side,
+        wobble: 1,
+        jitter: 0.3,
+        dry: 0.4,
+        layers: 1,
+        taper: false,
+        step: 4,
+      });
+    }
+  }
+
+  /* 皴：从峰脊往下拉。沿脊线画会变成一串挂着的竖条，像滴水不像皴 */
   if (cun > 0) {
-    const groups = Math.max(1, Math.round(cun / 3));
+    let topI = 0;
+    for (let i = 0; i < pts.length; i++) if (pts[i][1] < pts[topI][1]) topI = i;
+    const groups = Math.max(1, Math.round(cun / 4));
     for (let gi = 0; gi < groups; gi++) {
-      const ct = 0.08 + (gi + rnd() * 0.6) / groups;
+      const u = 0.1 + (gi / groups) * 0.8 + (rnd() - 0.5) * 0.1;
+      const idx = Math.round(Math.min(1, Math.max(0, u)) * (pts.length - 1));
+      const p = pts[idx];
+      const f = fadeAt(u, fade);
+      if (f < 0.14) continue;
+      // 峰左往左拉，峰右往右拉
+      const dirX = idx < topI ? -1 : 1;
       const cnt = Math.max(2, Math.round(cun / groups));
       for (let i = 0; i < cnt; i++) {
-        const t = Math.min(1, Math.max(0, ct + (rnd() - 0.5) * 0.14));
-        const idx = Math.round(t * (pts.length - 1));
-        const p = pts[idx];
-        const sl = slopeAt(pts, idx);
-        const len = amp * cunLen * (0.7 + rnd() * 0.8);
-        const f = fadeAt(t, fade);
-        if (f < 0.12) continue;
-        const dx = sl * len * 0.55 + (rnd() - 0.5) * len * 0.2;
+        const len = amp * cunLen * (0.5 + rnd() * 1.1);
+        const bx = p[0] + (rnd() - 0.5) * amp * 0.06;
+        const by = p[1] + amp * 0.015 + rnd() * amp * 0.04;
+        const drift = dirX * len * (0.22 + rnd() * 0.3);
         inkStroke(
           ctx,
           [
-            [p[0] + (rnd() - 0.5) * 3, p[1] + 2],
-            [p[0] + dx * 0.55, p[1] + len * 0.55],
-            [p[0] + dx, p[1] + len],
+            [bx, by],
+            [bx + drift * 0.45 + (rnd() - 0.5) * 3, by + len * 0.5],
+            [bx + drift, by + len],
           ],
           {
             color: lineColor,
-            width: Math.max(0.7, lineWidth * 0.5),
-            alpha: lineAlpha * cunAlpha * f * (0.6 + rnd() * 0.7),
+            width: Math.max(0.7, lineWidth * 0.46),
+            alpha: lineAlpha * cunAlpha * f * (0.45 + rnd() * 0.65),
             seed: seed + 300 + gi * 31 + i * 7,
-            wobble: 0.5,
-            jitter: 0.2,
-            dry: 0.34,
+            wobble: 0.7,
+            jitter: 0.25,
+            dry: 0.46,
             layers: 1,
             taper: false,
             step: 3,
@@ -239,42 +356,49 @@ export function mass(ctx, o = {}) {
     }
   }
 
-  /* 苔点：压在脊线上，聚一丛最有神 */
+  /* 苔点：压在脊线上，聚成两三丛，不沿脊撒胡椒 */
   if (moss > 0) {
-    const mt = 0.3 + rnd() * 0.35;
+    const mt = 0.24 + rnd() * 0.4;
     for (let i = 0; i < moss; i++) {
-      const t = Math.min(0.97, Math.max(0.03, mt + (rnd() - 0.5) * 0.3));
-      const idx = Math.round(t * (pts.length - 1));
+      const u = Math.min(0.97, Math.max(0.03, mt + (rnd() - 0.5) * 0.34));
+      const idx = Math.round(u * (pts.length - 1));
       const p = pts[idx];
-      const f = fadeAt(t, fade);
+      const f = fadeAt(u, fade);
       if (f < 0.35) continue;
-      ctx.save();
-      ctx.fillStyle = hexA(lineColor, lineAlpha * 0.85 * f);
-      ctx.beginPath();
-      ctx.ellipse(
-        p[0] + (rnd() - 0.5) * 5,
-        p[1] - 1 + (rnd() - 0.5) * 3,
-        1.7 + rnd() * 1.6,
-        1.3 + rnd() * 1.1,
-        rnd() * 3,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
-      ctx.restore();
+      const clump = 1 + Math.floor(rnd() * 3);
+      for (let c = 0; c < clump; c++) {
+        ctx.save();
+        ctx.fillStyle = hexA(lineColor, lineAlpha * 0.9 * f * (0.7 + rnd() * 0.4));
+        ctx.beginPath();
+        ctx.ellipse(
+          p[0] + (rnd() - 0.5) * amp * 0.05,
+          p[1] - 1 + (rnd() - 0.5) * 4,
+          1.6 + rnd() * 1.7,
+          1.2 + rnd() * 1.2,
+          rnd() * 3,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        ctx.restore();
+      }
     }
   }
 
-  /* 山脚化开 */
+  /* 山脚化开：必须裁剪到山体自身。
+   * 原版直接 destination-out 横扫整幅，会把画下半部擦成一片死白，
+   * 这是之前「下半部大片空白」的直接原因。 */
   if (footFade > 0) {
     ctx.save();
+    outlinePath();
+    ctx.clip();
     ctx.globalCompositeOperation = 'destination-out';
-    const yy = baseY + (footY - baseY) * 0.55;
+    const yy = baseY + (footY - baseY) * 0.6;
     const gg = ctx.createLinearGradient(0, yy, 0, footY);
     gg.addColorStop(0, `rgba(0,0,0,0)`);
     gg.addColorStop(1, `rgba(0,0,0,${footFade})`);
     ctx.fillStyle = gg;
-    ctx.fillRect(0, yy, vw, footY - yy);
+    ctx.fillRect(x0 - tail, yy, x1 - x0 + tail * 2, footY - yy);
     ctx.restore();
   }
 }
@@ -295,46 +419,163 @@ export function ridge(w, y, amp, seed, peaks = 3, seg = 96) {
   return sampleProfile(knots, seg).map(([t, h]) => [w * t, y - h * amp]);
 }
 
-/** 旧接口：通用山体（账本用） */
+/**
+ * 单峰剖面。
+ *
+ * 形状由两段接成：下段 k^p 山脚缓、越上越陡；上段一段收顶的弧到顶斜率归零。
+ * 两段相接处那道折，就是宋画里的肩。
+ *
+ * 只要用整条正弦／抛物线，顶端斜率归零、斜率全程递减，
+ * 出来一定是「面包」：没有峰脊的转折，也没有远近高差。
+ */
+function peakHeight(t, pk) {
+  const { cx, half, h = 1, tilt = 0 } = pk;
+  // crest 越大上坡越陡；旧参数 sharp 仍可用，映射过来
+  const crest = pk.crest != null ? pk.crest : 1.4 + ((pk.sharp ?? 1.2) - 1) * 2.2;
+  const p = 1.1 + crest * 0.42;
+  const kc = 0.86;
+  const vc = Math.pow(kc, p);
+
+  const x0 = cx - half;
+  const x1 = cx + half;
+  if (t <= x0 || t >= x1) return 0;
+  const apex = Math.min(0.9, Math.max(0.1, 0.52 + tilt * 0.36));
+  const u = (t - x0) / (x1 - x0);
+
+  let k;
+  let side;
+  if (u <= apex) {
+    k = u / apex;
+    side = 1;
+  } else {
+    k = (1 - u) / (1 - apex);
+    side = 0;
+  }
+
+  const v =
+    k <= kc ? Math.pow(k, p) : 1 - (1 - vc) * Math.pow((1 - k) / (1 - kc), 1.6);
+
+  // 两坡略不等，避免完全对称
+  const bias = side ? 1 : 0.93 + ((Math.abs(tilt) * 10) % 1) * 0.11;
+  return Math.max(0, Math.min(1, v * bias)) * h;
+}
+
+/**
+ * 几座峰合成一道山脊：取包络，主峰压住次峰。
+ * 峰间用一道很低的鞍部连起来，两端收到零，
+ * 这样是一道连续的脊，不是几个分开的隆起。
+ */
+export function composeRidge(peaks, n = 220) {
+  let lo = 1;
+  let hi = 0;
+  for (const pk of peaks) {
+    lo = Math.min(lo, pk.cx - pk.half);
+    hi = Math.max(hi, pk.cx + pk.half);
+  }
+  lo = Math.max(0, lo);
+  hi = Math.min(1, hi);
+
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    let hh = 0;
+    for (const pk of peaks) {
+      const v = peakHeight(t, pk);
+      if (v > hh) hh = v;
+    }
+    const base = 0.085 * (0.55 + 0.28 * Math.sin(t * 9.1 + 1.7) + 0.14 * Math.sin(t * 21.3 + 0.4));
+    hh = Math.max(hh, base);
+    // 两端收到零，山落在纸上而不是被一刀切断
+    const edge = Math.min(1, (t - lo) / 0.03, (hi - t) / 0.03);
+    out.push([t, hh * Math.max(0, edge)]);
+  }
+  return out;
+}
+
+/**
+ * 一道山脉。主峰 + 次峰，高差写进 peaks。
+ * 场景只给峰的位置和高度，块面、脊线、皴、分脉由这里负责。
+ */
 export function mountain(ctx, w, h, o = {}) {
   const {
     seed = 1,
-    ridgeY = h * 0.45,
+    baseY = h * 0.45,
     amp = h * 0.16,
-    y0 = h,
-    peaks = 2.6,
+    footY = h,
+    peaks: peakList = null,
+    peakCount = null,
     tone = '#7c9160',
     toneAlpha = 0.16,
     lineColor = '#2b2f2b',
-    lineAlpha = 0.6,
+    lineAlpha = 0.55,
     lineWidth = 1.8,
     texture = 3,
+    fade = null,
+    shade = null,
+    footFade = 0.3,
+    band = 0.12,
+    veins = 2,
+    moss = 0,
+    inner = 0,
+    knots: givenKnots = null,
+    span: givenSpan = null,
   } = o;
-  const rnd = mulberry32(seed);
-  const knots = [[0, 0.04]];
-  const n = Math.max(2, Math.round(peaks));
-  for (let i = 0; i < n; i++) {
-    const t = (i + 0.55) / n;
-    knots.push([t - 0.16, 0.2 + rnd() * 0.2]);
-    knots.push([t, 0.5 + rnd() * 0.5]);
-    knots.push([t + 0.16, 0.24 + rnd() * 0.22]);
+
+  /* 兼容旧写法：peaks 传数字时按等分峰值自动生成；不传则给一道两峰的默认山 */
+  const list =
+    peakList ||
+    (typeof peakCount === 'number'
+      ? Array.from({ length: Math.max(2, Math.round(peakCount)) }, (_, i, arr) => ({
+          cx: (i + 0.55) / arr.length,
+          half: 0.16,
+          h: 0.55 + (i % 2 === 0 ? 0.45 : 0.1),
+          tilt: i % 2 === 0 ? 0.14 : -0.16,
+        }))
+      : [
+          { cx: 0.5, half: 0.3, h: 1, tilt: 0.1 },
+          { cx: 0.72, half: 0.16, h: 0.58, tilt: -0.2 },
+        ]);
+
+  const knots = givenKnots || composeRidge(list, 220);
+
+  /* 山只占它自己那一段：两端收在峰脚，山外留纸 */
+  let span = givenSpan;
+  if (!span) {
+    let t0 = 1;
+    let t1 = 0;
+    for (const pk of list) {
+      t0 = Math.min(t0, pk.cx - pk.half);
+      t1 = Math.max(t1, pk.cx + pk.half);
+    }
+    span = [Math.max(0, t0), Math.min(1, t1)];
   }
-  knots.push([1, 0.05]);
-  knots.sort((a, b) => a[0] - b[0]);
+
   mass(ctx, {
     vw: w,
-    baseY: ridgeY,
+    baseY,
     amp,
     knots,
-    footY: y0,
+    footY,
+    span,
     tone,
     toneAlpha,
     lineColor,
     lineAlpha,
     lineWidth,
-    cun: texture * 2,
+    dry: 0.14,
+    layers: 1,
+    fade,
+    cun: texture * 5,
+    cunLen: 0.24,
+    cunAlpha: 0.34,
+    moss: moss || Math.max(0, Math.round(texture * 1.8)),
     seed,
-    footFade: 0.35,
+    footFade,
+    shade,
+    band,
+    veins,
+    veinDepth: 0.5,
+    inner,
   });
 }
 
@@ -385,7 +626,35 @@ function ribbon(ctx, pts, w0, w1, o = {}) {
   }
 }
 
-/** 叶点批量填充：一次 path 一笔色 */
+/** 一片叶：尖头的小笔，起于 (x,y) 朝 ang 伸出。不是圆球 */
+function leafDab(ctx, x, y, ang, len, wid) {
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  const nx = -s * wid;
+  const ny = c * wid;
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + c * len * 0.42 + nx, y + s * len * 0.42 + ny, x + c * len, y + s * len);
+  ctx.quadraticCurveTo(x + c * len * 0.42 - nx, y + s * len * 0.42 - ny, x, y);
+}
+
+/** 一丛叶：从一点朝一个扇面散出几片，个字点／介字点的意思 */
+function leafFan(px, py, dir, spread, n, len, rnd, out) {
+  for (let i = 0; i < n; i++) {
+    const k = n === 1 ? 0.5 : i / (n - 1);
+    const ang = dir + (k - 0.5) * spread + (rnd() - 0.5) * 0.24;
+    const ll = len * (0.6 + rnd() * 0.75);
+    out.push({
+      x: px + (rnd() - 0.5) * len * 0.5,
+      y: py + (rnd() - 0.5) * len * 0.35,
+      ang,
+      len: ll,
+      wid: ll * (0.15 + rnd() * 0.1),
+      a: 0.35 + rnd() * 0.65,
+    });
+  }
+}
+
+/** 叶点批量填充：按浓淡分桶，一次 path 一笔色 */
 function leafDots(ctx, dots, color, baseAlpha) {
   if (!dots.length) return;
   const buckets = [[], [], []];
@@ -398,11 +667,56 @@ function leafDots(ctx, dots, color, baseAlpha) {
     ctx.save();
     ctx.beginPath();
     for (const d of buckets[b]) {
-      ctx.ellipse(d.x, d.y, d.rx, d.ry, d.ang, 0, Math.PI * 2);
+      if (d.len) leafDab(ctx, d.x, d.y, d.ang, d.len, d.wid);
+      else ctx.ellipse(d.x, d.y, d.rx, d.ry, d.ang, 0, Math.PI * 2);
     }
-    ctx.fillStyle = hexA(color, baseAlpha * (0.62 + b * 0.19));
+    ctx.fillStyle = hexA(color, baseAlpha * (0.6 + b * 0.22));
     ctx.fill();
     ctx.restore();
+  }
+}
+
+/**
+ * 一丛树。
+ *
+ * 场景只给落点，丛内怎么长由这里决定：主树最大，往两侧递减，
+ * 冠可以互相压住。这样是一片林，不是一排等距的杆子。
+ */
+export function treeGroup(ctx, o = {}) {
+  const {
+    x = 0,
+    y = 0,
+    size = 50,
+    count = 3,
+    spread = 0.9,
+    seed = 1,
+    color = '#3a3f38',
+    alpha = 0.55,
+    canopy = '#4d5c3d',
+    canopyAlpha = 0.18,
+    shape = 'round',
+    baseAngle = 0.02,
+  } = o;
+  const rnd = mulberry32(seed);
+  for (let i = 0; i < count; i++) {
+    const k = count === 1 ? 0 : i / (count - 1);
+    // 主树最大，往两侧递减，且不排成等距
+    const fall = k === 0 ? 1 : 1 - Math.abs(k - 0.5) * 0.55 - (i % 2) * 0.1;
+    const ss = size * (0.55 + 0.55 * fall) * (0.85 + rnd() * 0.3);
+    // 丛宽以树高为单位，允许冠与冠互相压住
+    const ox = (k - 0.5) * size * spread * 1.7 + (rnd() - 0.5) * size * 0.2;
+    const oy = (rnd() - 0.5) * size * 0.1 + baseAngle * ox;
+    treeShape(ctx, x + ox, y + oy, {
+      size: ss,
+      seed: seed + i * 131,
+      color,
+      alpha: alpha * (0.82 + rnd() * 0.3),
+      canopy,
+      canopyAlpha: canopyAlpha * (0.8 + rnd() * 0.4),
+      shape: shape === 'mixed' ? (rnd() > 0.72 ? 'pine' : 'round') : shape,
+      trunkRatio: 0.5 + rnd() * 0.18,
+      flip: rnd() > 0.5 ? 1 : -1,
+    });
   }
 }
 
@@ -612,30 +926,46 @@ export function treeShape(ctx, x, y, o = {}) {
   }
 
   const dots = [];
-  const clusterAt = (cx, cy, r, n, a0) => {
+  /**
+   * 叶落在枝上：沿枝走，靠枝端密、靠枝根疏，
+   * 叶朝外张开，中间留缝，不做成一团棉花。
+   */
+  const alongBranch = (from, to, n, dirBias, leafLen, spreadW) => {
     for (let i = 0; i < n; i++) {
-      const ang = a0 + (i / Math.max(1, n - 1) - 0.5) * 2.3 + (rnd() - 0.5) * 0.3;
-      const rr = r * (0.3 + rnd() * 0.95);
-      const px = cx + Math.cos(ang + Math.PI / 2) * rr * 0.85 + (rnd() - 0.5) * r * 0.25;
-      const py = cy + Math.sin(ang - 0.2) * rr * 0.4 + (rnd() - 0.5) * r * 0.22;
-      dots.push({
-        x: px,
-        y: py,
-        rx: Math.max(1.7, s * (0.038 + rnd() * 0.022)),
-        ry: Math.max(1.0, s * (0.013 + rnd() * 0.008)),
-        ang: ang * 0.55 + (rnd() - 0.5) * 0.4,
-        a: 0.35 + rnd() * 0.65,
-      });
+      const u = Math.pow(rnd(), 0.75) * 0.9 + 0.1;
+      const px = from[0] + (to[0] - from[0]) * u;
+      const py = from[1] + (to[1] - from[1]) * u;
+      const side = rnd() > 0.5 ? 1 : -1;
+      const dir = -Math.PI / 2 + side * (0.5 + rnd() * 0.75) + dirBias;
+      leafFan(
+        px + (rnd() - 0.5) * spreadW,
+        py + (rnd() - 0.5) * spreadW * 0.55,
+        dir,
+        1.15,
+        2 + Math.floor(rnd() * 2),
+        leafLen,
+        rnd,
+        dots
+      );
     }
   };
 
   for (const br of branches) {
-    clusterAt(br.tip[0], br.tip[1] + s * 0.015, s * 0.16, s > 55 ? 9 : 6, -0.2 * br.side);
-    clusterAt(br.mid[0], br.mid[1] + s * 0.02, s * 0.11, s > 55 ? 5 : 3, 0.3 * br.side);
+    alongBranch(
+      [br.mid[0] * 0.35 + br.tip[0] * 0.65, br.mid[1] * 0.35 + br.tip[1] * 0.65],
+      br.tip,
+      s > 55 ? 5 : 4,
+      -0.25 * br.side,
+      s * 0.085,
+      s * 0.055
+    );
+    alongBranch(br.mid, br.tip, s > 55 ? 3 : 2, 0.2 * br.side, s * 0.07, s * 0.05);
   }
-  // 冠顶与冠底各一小簇，把轮廓撑开
-  clusterAt(top[0] + s * 0.02, top[1] - s * 0.03, s * 0.15, s > 55 ? 8 : 5, 0);
-  clusterAt(x + leanX * 0.5, y - H * 0.5, s * 0.1, 4, 0.6);
+  // 冠顶叶最密，压住整棵树的轮廓
+  leafFan(top[0], top[1] - s * 0.02, -Math.PI / 2, 1.7, s > 55 ? 7 : 5, s * 0.1, rnd, dots);
+  leafFan(top[0] + s * 0.03, top[1] + s * 0.05, -Math.PI / 2 + 0.5, 1.5, 4, s * 0.08, rnd, dots);
+  // 干身中段一小丛，冠才不悬空
+  leafFan(x + leanX * 0.45, y - H * 0.48, -Math.PI / 2 - 0.9, 1.2, 3, s * 0.075, rnd, dots);
 
   leafDots(ctx, dots, leafColor, leafA);
 }
@@ -722,15 +1052,16 @@ export function mist(ctx, o = {}) {
     const cy = y + (rnd() - 0.5) * h * 0.55;
     const rx = w * (0.2 + rnd() * 0.3);
     const ry = h * (0.5 + rnd() * 0.75);
-    const st = strength * (0.3 + rnd() * 0.35);
+    // 单块上限压住：一块擦掉六成以上，纸上就是一道横扫的硬白带
+    const st = Math.min(0.32, strength * (0.15 + rnd() * 0.15));
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(tilt * (rnd() - 0.5));
     ctx.scale(rx, ry);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
     g.addColorStop(0, `rgba(0,0,0,${st})`);
-    g.addColorStop(0.45, `rgba(0,0,0,${st * 0.72})`);
-    g.addColorStop(0.75, `rgba(0,0,0,${st * 0.28})`);
+    g.addColorStop(0.45, `rgba(0,0,0,${st * 0.74})`);
+    g.addColorStop(0.78, `rgba(0,0,0,${st * 0.26})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(-1, -1, 2, 2);
@@ -828,41 +1159,139 @@ export function bankLine(ctx, o = {}) {
 
 /* ────────────────────────── 屋、桥、船 ────────────────────────── */
 
+/**
+ * 一间屋。
+ *
+ * 浙北民居：屋顶长、两头起翘，出檐压住墙，墙脚一道横线。
+ * 屋顶是一笔带弧的线，不是三角形；墙只留一条腿，不封口，
+ * 一片房子叠在一起才不会变成一堆小方块。
+ */
 export function hut(ctx, x, y, o = {}) {
-  const { size = 26, color = '#3a3f38', alpha = 0.6, seed = 9, flip = false, wall = 0.5 } = o;
+  const {
+    size = 26,
+    color = '#3a3f38',
+    alpha = 0.6,
+    seed = 9,
+    flip = false,
+    wall = 0.46,
+    tone = null,
+    toneAlpha = 0.1,
+  } = o;
   const s = size;
   const d = flip ? -1 : 1;
-  // 屋顶：起翘的两笔
+
+  /* 墙：淡墨一块，先铺，屋顶压在上面 */
+  if (tone) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.36 * d, y - s * 0.04);
+    ctx.lineTo(x + s * 0.36 * d, y - s * 0.04);
+    ctx.lineTo(x + s * 0.36 * d, y + s * wall);
+    ctx.lineTo(x - s * 0.36 * d, y + s * wall);
+    ctx.closePath();
+    ctx.fillStyle = hexA(tone, toneAlpha);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* 屋顶：一道长弧，中间略塌，两端起翘 */
   inkStroke(
     ctx,
     [
-      [x - s * 0.62 * d, y - s * 0.02],
-      [x - s * 0.3 * d, y - s * 0.42],
-      [x, y - s * 0.5],
-      [x + s * 0.3 * d, y - s * 0.42],
-      [x + s * 0.62 * d, y - s * 0.02],
+      [x - s * 0.66 * d, y - s * 0.03],
+      [x - s * 0.42 * d, y - s * 0.3],
+      [x - s * 0.16 * d, y - s * 0.46],
+      [x + s * 0.14 * d, y - s * 0.47],
+      [x + s * 0.42 * d, y - s * 0.32],
+      [x + s * 0.66 * d, y - s * 0.05],
     ],
-    { color, width: Math.max(1, s * 0.055), alpha, seed: seed + 1, wobble: 0.35, dry: 0.1, layers: 2, taper: true }
+    {
+      color,
+      width: Math.max(1.1, s * 0.06),
+      alpha,
+      seed: seed + 1,
+      wobble: 0.4,
+      jitter: 0.25,
+      dry: 0.14,
+      layers: 2,
+      taper: true,
+    }
   );
-  // 屋身
+
+  /* 出檐的暗：屋顶下一道短横，把檐与墙分开 */
   inkStroke(
     ctx,
     [
-      [x - s * 0.4 * d, y],
-      [x - s * 0.4 * d, y + s * wall],
-      [x + s * 0.4 * d, y + s * wall],
-      [x + s * 0.4 * d, y],
+      [x - s * 0.44 * d, y - s * 0.02],
+      [x + s * 0.44 * d, y - s * 0.04],
     ],
-    { color, width: Math.max(0.7, s * 0.035), alpha: alpha * 0.72, seed: seed + 2, wobble: 0.25, dry: 0.1, layers: 1, taper: false }
+    {
+      color,
+      width: Math.max(0.8, s * 0.03),
+      alpha: alpha * 0.5,
+      seed: seed + 2,
+      wobble: 0.25,
+      dry: 0.2,
+      layers: 1,
+      taper: false,
+    }
   );
-  // 门
+
+  /* 墙脚：屋才坐在地上，不是浮着 */
   inkStroke(
     ctx,
     [
-      [x - s * 0.07, y + s * wall],
-      [x - s * 0.07, y + s * (wall - 0.26)],
+      [x - s * 0.34 * d, y + s * wall],
+      [x + s * 0.34 * d, y + s * wall],
     ],
-    { color, width: Math.max(0.6, s * 0.026), alpha: alpha * 0.55, seed: seed + 3, wobble: 0.1, dry: 0, layers: 1, taper: false }
+    {
+      color,
+      width: Math.max(0.9, s * 0.034),
+      alpha: alpha * 0.78,
+      seed: seed + 3,
+      wobble: 0.3,
+      dry: 0.18,
+      layers: 1,
+      taper: false,
+    }
+  );
+
+  /* 一条墙腿，不必四面封口 */
+  inkStroke(
+    ctx,
+    [
+      [x - s * 0.34 * d, y - s * 0.02],
+      [x - s * 0.34 * d, y + s * wall],
+    ],
+    {
+      color,
+      width: Math.max(0.7, s * 0.026),
+      alpha: alpha * 0.5,
+      seed: seed + 5,
+      wobble: 0.2,
+      dry: 0.22,
+      layers: 1,
+      taper: false,
+    }
+  );
+
+  /* 门：一条竖笔，不画成框 */
+  inkStroke(
+    ctx,
+    [
+      [x + s * 0.06 * d, y + s * wall],
+      [x + s * 0.06 * d, y + s * (wall - 0.24)],
+    ],
+    {
+      color,
+      width: Math.max(0.6, s * 0.03),
+      alpha: alpha * 0.6,
+      seed: seed + 7,
+      wobble: 0.1,
+      dry: 0.1,
+      layers: 1,
+      taper: false,
+    }
   );
 }
 

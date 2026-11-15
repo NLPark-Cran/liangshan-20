@@ -241,7 +241,8 @@ export async function drawBird(c: Context) {
 
 /** 我的观测图鉴（注册用户） */
 export async function myBirds(c: Context) {
-  const user = c.get('user') as AuthUser;
+  const user = c.get('user') as AuthUser | undefined;
+  if (!user) return c.json({ ok: false, error: 'unauthorized' }, 401);
 
   const { rows: speciesRows } = await pool.query<{ species: string; n: string }>(
     `SELECT species, count(*)::text AS n FROM bird_logs WHERE user_id = $1 GROUP BY species`,

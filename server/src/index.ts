@@ -4,10 +4,12 @@
  */
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import type { Next } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { migrate, pool } from './db.js';
 import { redis } from './session.js';
+import type { AuthUser } from './auth.js';
 import {
   loadUser,
   guestLogin,
@@ -27,7 +29,7 @@ import {
   track,
 } from './api.js';
 
-const app = new Hono();
+const app = new Hono<{ Variables: { user: AuthUser } }>();
 
 app.use('*', logger());
 
@@ -44,6 +46,18 @@ app.use(
 
 // 所有请求都尝试解析会话
 app.use('/api/*', loadUser);
+
+// 需要登录的路径统一守卫：漏写 user 检查也不会 500
+const NEED_LOGIN = ['/api/birds/', '/api/ledger/', '/api/tern/', '/api/stats/'];
+app.use('/api/*', async (c, next) => {
+  const path = c.req.path;
+  const needs = NEED_LOGIN.some((p) => path.startsWith(p));
+  if (needs) {
+    const u = c.get('user');
+    if (!u) return c.json({ ok: false, error: 'unauthorized' }, 401);
+  }
+  await next();
+});
 
 /* ────────────────────────── 健康检查 ────────────────────────── */
 
