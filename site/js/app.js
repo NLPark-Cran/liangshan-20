@@ -398,14 +398,16 @@ function drawCoverPanel(ctx, w, h) {
     if (!c) return;
     const [x, y] = mapper.toPx(c.lon, c.lat);
 
+    // 引线朝右下，与序号对齐
+    const dx = 15;
+    const dy = 15;
     ctx.save();
-    // 引线
-    ctx.strokeStyle = 'rgba(157,58,48,0.28)';
+    ctx.strokeStyle = 'rgba(157,58,48,0.26)';
     ctx.lineWidth = 0.8;
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + 14, y - 14);
-    ctx.lineTo(x + 30, y - 14);
+    ctx.moveTo(x + 2, y + 2);
+    ctx.lineTo(x + dx, y + dy);
+    ctx.lineTo(x + dx + 16, y + dy);
     ctx.stroke();
 
     // 点
@@ -413,16 +415,16 @@ function drawCoverPanel(ctx, w, h) {
     ctx.beginPath();
     ctx.arc(x, y, 3.2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(244,239,228,0.9)';
+    ctx.strokeStyle = 'rgba(244,239,228,0.92)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
 
     // 序号
-    ctx.fillStyle = 'rgba(90,98,91,0.72)';
+    ctx.fillStyle = 'rgba(90,98,91,0.78)';
     ctx.font = '8px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(String(i + 1).padStart(2, '0'), x + 33, y - 11);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1).padStart(2, '0'), x + dx + 19, y + dy);
     ctx.restore();
   });
 

@@ -23,6 +23,17 @@
 - 站点根目录 `/srv/sites/2026.crina.at`，属主 caddy:caddy
 - Caddy 配置 `/etc/caddy/sites.d/2026.crina.at.caddy`
 - 本地开发服务跑在 http://127.0.0.1:8124/（tools/serve.py）
+- GitHub 仓库 https://github.com/NLPark-Cran/liangshan-20 已建并推送，分支 main
+
+**已修掉的 bug（不要再犯）**
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| 观鸟面板文字竖排、内容挤成一列 | `#bird-panel` 本身带 `.bird` 类，`renderShell` 内部又套一层 `.bird`，双层 grid | HTML 里去掉外层 `.bird`，只留 id |
+| 账本右侧山景不显示，报 `ctx.clearRect is not a function` | `drawLedgerMountain(ctx, w, h, s)` 签名与调用方不一致，调用方传的是 canvas | 改为 `drawLedgerMountain(canvas, s)`，内部自己取 ctx 和尺寸 |
+| 燕鸥画面空白，报 `seal is not defined` | `tern-scene.js` 用了 `seal` 但没 import | 补 import |
+| 长卷标记位置与地图对不上 | 标记用另一套写死的百分比，与投影结果无关 | 改为按段落位置计算 |
+| 山脊是尖角三角、树像散沙 | `Math.abs(sin)` 生成尖角；点阵撒树 | 改用 `inkfig.js` 的钟形峰叠加与填充墨团 |
 
 **并行中的后台任务**
 
