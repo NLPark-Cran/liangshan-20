@@ -319,6 +319,29 @@
   pointer-events: none;
 }
 
+/* 窄屏：卷首题字挪到地图上方，避免压图 */
+@media (max-width: 720px) {
+  .panel__cover {
+    top: 6%;
+    transform: none;
+    left: var(--s4);
+    max-width: 100%;
+  }
+  .panel__coverkicker {
+    display: none;
+  }
+  .panel__covertitle {
+    font-size: 1.5rem;
+    letter-spacing: 0.2em;
+    margin-bottom: 0.5rem;
+  }
+  .panel__coverdesc {
+    font-size: 0.78rem;
+    line-height: 1.9;
+    max-width: 20em;
+  }
+}
+
 .panel__coverkicker {
   font-family: var(--font-kai);
   font-size: 0.86rem;
@@ -544,8 +567,14 @@
     order: 3;
     flex-basis: 100%;
   }
+  .scroll__tools .btn {
+    padding: 0.36rem 0.62rem;
+    font-size: 0.74rem;
+    min-width: 2.1rem;
+    justify-content: center;
+  }
   .scroll__tools .btn span {
-    display: none;
+    display: inline;
   }
   .mark__label {
     font-size: 0.82rem;
