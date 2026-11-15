@@ -335,6 +335,45 @@ em {
   letter-spacing: 0.04em;
 }
 
+/* 本组札记：与领导人引语在视觉上彻底区分 */
+.note-block {
+  margin: var(--s6) 0;
+  padding: var(--s4) var(--s6);
+  background: rgba(221, 210, 187, 0.28);
+  border-left: 1px solid var(--ink-300);
+}
+
+.note-block__tag {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.08rem 0.44rem;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-500);
+  border: 1px solid var(--ink-300);
+  border-radius: 1px;
+  opacity: 0.8;
+}
+
+.note-block__text {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--t-body);
+  line-height: 1.95;
+  color: var(--ink-700);
+}
+
+.note-block cite {
+  display: block;
+  margin-top: var(--s2);
+  font-family: var(--font-sans);
+  font-size: var(--t-tiny);
+  font-style: normal;
+  color: var(--ink-300);
+  letter-spacing: 0.06em;
+}
+
 /* ── 来源标注 ───────────────────────────────────────── */
 
 .src {

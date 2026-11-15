@@ -163,6 +163,15 @@ function renderSiteHTML(p, index, total) {
        </div>`
     : '';
 
+  // 本组自己的话，和领导人引语在视觉上必须分开
+  const noteHTML = p.note
+    ? `<div class="note-block">
+         <span class="note-block__tag">本组札记</span>
+         <p class="note-block__text">${esc(p.note.text)}</p>
+         ${p.note.cite ? `<cite>${esc(p.note.cite)}</cite>` : ''}
+       </div>`
+    : '';
+
   const storyHTML = (p.story || []).map((para) => `<p>${esc(para)}</p>`).join('');
 
   const prev = index > 0 ? `<button class="btn btn--ghost" data-nav="prev">← 上一站</button>` : '<span></span>';
@@ -193,6 +202,8 @@ function renderSiteHTML(p, index, total) {
         ${p.data && p.data.length ? `<div class="stats">${statsHTML}</div>` : ''}
 
         ${quoteHTML}
+
+        ${noteHTML}
 
         ${p.source ? `<p class="src">${esc(p.source)}</p>` : ''}
 
