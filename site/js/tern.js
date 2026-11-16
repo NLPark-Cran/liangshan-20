@@ -41,6 +41,11 @@ const ISLANDS = [
   },
 ];
 
+/* 每个繁殖季的电力与人力预算。
+   这是游戏的核心约束：摆假鸟和放声音都要耗电，
+   预算不够两者同时拉满，必须取舍。 */
+const BUDGET = 4;
+
 const DECOYS = [
   { id: 'few', name: '摆 3 只', value: 0.34, cost: 1, desc: '太少，鸟群看不见' },
   { id: 'mid', name: '摆 12 只', value: 0.62, cost: 2, desc: '一个能引起注意的小群' },
@@ -150,7 +155,11 @@ function renderPanel() {
 }
 
 function renderSetup() {
-  const canGo = S.island && S.decoy && S.sound;
+  const decoy = DECOYS.find((d) => d.id === S.decoy);
+  const sound = SOUNDS.find((s) => s.id === S.sound);
+  const spent = (decoy?.cost || 0) + (sound?.cost || 0);
+  const over = spent > BUDGET;
+  const canGo = S.island && S.decoy && S.sound && !over;
 
   panelEl.innerHTML = `
     <div class="tern">
@@ -162,6 +171,12 @@ function renderSetup() {
       <div class="tern__intro">
         <p>五月，海上的一座小岛。护鸟的人在礁石上摆好假鸟，接上太阳能电池，把叫声放出去。</p>
         <p>剩下的事，得等。</p>
+      </div>
+
+      <div class="tern__budget ${over ? 'is-over' : ''}">
+        <span>这个季度的电力和人力</span>
+        <b>${spent} / ${BUDGET}</b>
+        <i>${over ? '超了，得省一样' : '摆假鸟和放声音都要耗电'}</i>
       </div>
 
       <div class="tern__step">
@@ -179,12 +194,12 @@ function renderSetup() {
       </div>
 
       <div class="tern__step">
-        <h3 class="tern__st">二 · 摆假鸟</h3>
+        <h3 class="tern__st">二 · 摆假鸟 <em class="tern__cost">耗电 1—3</em></h3>
         <div class="tern__opts tern__opts--row">
           ${DECOYS.map(
             (it) => `
             <button class="opt opt--sm ${S.decoy === it.id ? 'is-on' : ''}" data-group="decoy" data-id="${it.id}">
-              <span class="opt__n">${it.name}</span>
+              <span class="opt__n">${it.name}<em>${it.cost}</em></span>
               <span class="opt__d">${it.desc}</span>
             </button>`
           ).join('')}
@@ -192,12 +207,12 @@ function renderSetup() {
       </div>
 
       <div class="tern__step">
-        <h3 class="tern__st">三 · 放声音</h3>
+        <h3 class="tern__st">三 · 放声音 <em class="tern__cost">耗电 1—3</em></h3>
         <div class="tern__opts tern__opts--row">
           ${SOUNDS.map(
             (it) => `
             <button class="opt opt--sm ${S.sound === it.id ? 'is-on' : ''}" data-group="sound" data-id="${it.id}">
-              <span class="opt__n">${it.name}</span>
+              <span class="opt__n">${it.name}<em>${it.cost}</em></span>
               <span class="opt__d">${it.desc}</span>
             </button>`
           ).join('')}
@@ -208,7 +223,13 @@ function renderSetup() {
         <button class="btn btn--seal" id="tern-wait" ${canGo ? '' : 'disabled'}>
           等一个繁殖季
         </button>
-        ${!canGo ? '<span class="tern__tip">三样都选好才能开始</span>' : ''}
+        ${
+          over
+            ? '<span class="tern__tip is-warn">钱只够一样拉满，另一样得省着用</span>'
+            : !canGo
+              ? '<span class="tern__tip">三样都选好才能开始</span>'
+              : ''
+        }
       </div>
 
       <p class="tern__tip tern__tip--flow">
@@ -243,12 +264,18 @@ function runSeason() {
   const decoy = DECOYS.find((d) => d.id === S.decoy);
   const sound = SOUNDS.find((s) => s.id === S.sound);
   if (!island || !decoy || !sound) return;
+  // 预算这道闸门在 render 里已经拦过，这里再校验一次，
+  // 防止状态被别处改到超支还继续跑
+  if (decoy.cost + sound.cost > BUDGET) return;
 
   S.phase = 'waiting';
   renderPanel();
 
-  // 成功率：岛的底子 × 假鸟 × 声音，再乘上随机性
-  const p = Math.min(0.92, island.base * (0.4 + decoy.value) * (0.4 + sound.value) * 2.4);
+  // 成功率：岛的底子 × 假鸟与声音的合力，再乘上随机性。
+  // 用加法再取幂，让「一端拉满 + 一端省着」与「两样都中等」都有竞争力；
+  // 纯乘法会让两样中等永远占优，选择就失去了意义。
+  const mix = decoy.value + sound.value; // 0.64 ~ 1.86
+  const p = Math.min(0.92, island.base * Math.pow(mix, 2.1) * 2.6);
   const roll = Math.random();
   S.lastRoll = roll;
 

@@ -17,34 +17,37 @@ import { auth, submitLedger } from './api.js';
 const START_YEAR = 2005;
 const END_YEAR = 2025;
 
+/* 矿山储量。100 单位，每年采 6.2 单位，2021 年前后见底。
+   储量是这个游戏的核心：矿不是取之不尽的，拖得越久越被动。 */
+const RESERVE_FULL = 100;
+const MINE_RATE = 6.2;
+
 const CONFIG = {
   mine: {
     name: '开矿',
-    income: (year) => {
-      // 越往后矿越薄，收益递减
-      const t = (year - START_YEAR) / 20;
-      return Math.round(320 * (1 - t * 0.45));
+    // 收入直接跟剩余储量挂钩，越挖越少，见底后只剩零头
+    income: (state) => {
+      if (state.reserve <= 0) return 6;
+      return Math.round(3.4 * state.reserve);
     },
     mountain: -3.2,
-    desc: '石头卖得掉，一年三百多万。山在变秃，但眼下谁都看得见钱。',
+    desc: '石头卖得掉，一年三百多万。山在变秃，矿也在变薄，总有挖完的一天。',
   },
   bamboo: {
     name: '种竹',
-    income: (year, health) => {
-      // 竹子要养几年才见效，且依赖山体健康
-      const t = (year - START_YEAR) / 20;
-      return Math.round(18 + t * 42 * (health / 100));
+    income: (state) => {
+      const t = (state.year - START_YEAR) / 20;
+      return Math.round(18 + t * 42 * (state.mountain / 100));
     },
     mountain: 1.4,
     desc: '短期看不见钱，五六年之后开始有笋、有竹材。山慢慢绿回来。',
   },
   eco: {
     name: '做生态',
-    income: (year, health) => {
-      // 生态产业完全依赖山的状态，山没养好没人来
-      if (health < 45) return 6;
-      const t = (year - START_YEAR) / 20;
-      return Math.round((health / 100) * (60 + t * 210));
+    income: (state) => {
+      if (state.mountain < 45) return 6;
+      const t = (state.year - START_YEAR) / 20;
+      return Math.round((state.mountain / 100) * (60 + t * 210));
     },
     mountain: 2.2,
     desc: '游客只为好山好水来。山还没养回来之前，这条路一直亏。',
@@ -52,10 +55,10 @@ const CONFIG = {
   restore: {
     name: '封山',
     // 封山期几乎无收入，但山恢复后村里会慢慢找到新的活路
-    income: (year, health) => {
-      if (health < 55) return 4;
-      const t = (year - START_YEAR) / 20;
-      return Math.round(4 + (health - 55) * 0.55 + t * 26);
+    income: (state) => {
+      if (state.mountain < 55) return 4;
+      const t = (state.year - START_YEAR) / 20;
+      return Math.round(4 + (state.mountain - 55) * 0.55 + t * 26);
     },
     mountain: 3.4,
     desc: '什么都不做，只是让它歇着。最快恢复，也最没有收入。',
@@ -69,10 +72,12 @@ function newState() {
     year: START_YEAR,
     cash: 320, // 村集体年收入，万元
     mountain: 100,
+    reserve: RESERVE_FULL, // 剩余矿石储量
     mode: 'mine',
     mineDepth: 0,
     pledged: false, // 是否已经做出过关矿决定
     closedMineYear: null,
+    repairDebt: 0, // 关矿时一次性付出的修复欠账
     rows: [], // 账本明细
     phase: 'play', // play | decide | over
     started: false,
@@ -149,14 +154,19 @@ function stepYear() {
   if (S.phase === 'over' || S.year >= END_YEAR) return;
 
   const cfg = CONFIG[S.mode];
-  const income = cfg.income(S.year, S.mountain);
+  const income = cfg.income(S);
 
   // 年份推进
   S.year += 1;
 
+  // 采矿消耗储量：矿会真的挖完
+  if (S.mode === 'mine' && S.reserve > 0) {
+    S.reserve = Math.max(0, +(S.reserve - MINE_RATE).toFixed(2));
+  }
+
   // 结算：村集体年收入就是当年的进账，不是累积的存款
   const delta = income;
-  S.cash = Math.max(0, Math.round(delta * 0.92 + S.cash * 0.08));
+  S.cash = Math.max(0, Math.round(delta * 0.9 + S.cash * 0.1));
 
   // 山体
   const mDelta = cfg.mountain;
@@ -265,6 +275,19 @@ function renderPlay() {
           <div class="gauge__fill gauge__fill--mountain" style="width:${S.mountain}%"></div>
         </div>
       </div>
+      <div class="gauge">
+        <div class="gauge__head">
+          <span>矿还剩下多少</span>
+          <b class="${S.reserve <= 0 ? 'is-spent' : ''}">${
+            S.reserve <= 0 ? '挖完了' : Math.round((S.reserve / RESERVE_FULL) * 100) + ' %'
+          }</b>
+        </div>
+        <div class="gauge__track">
+          <div class="gauge__fill gauge__fill--ore" style="width:${
+            Math.max(0, (S.reserve / RESERVE_FULL) * 100)
+          }%"></div>
+        </div>
+      </div>
     </div>
 
     <div class="acts">
@@ -300,10 +323,14 @@ function bindPlay() {
 }
 
 function renderDecision() {
+  // 把当前要还的修复欠账算给玩家看
+  const debt = Math.round((100 - S.mountain) * 2.2);
+  const reserveLeft = Math.round((S.reserve / RESERVE_FULL) * 100);
+
   panelEl.innerHTML = `
     <div class="ledger__head">
       <h2 class="ledger__title">${S.year} 年的村民大会</h2>
-      <p class="ledger__sub">桌上摆着一张纸，纸上写着一个数字</p>
+      <p class="ledger__sub">桌上摆着两张纸，一张是账本，一张是治理方案</p>
     </div>
 
     <div class="book">
@@ -311,13 +338,37 @@ function renderDecision() {
         <b>${S.cash}</b>
         <span>万元 · 这是去年的村集体收入</span>
       </div>
+      <div class="book__rows">
+        <div class="row">
+          <span class="row__y">矿</span>
+          <span class="row__t">还剩多少</span>
+          <span class="row__v">${reserveLeft}%</span>
+        </div>
+        <div class="row">
+          <span class="row__y">山</span>
+          <span class="row__t">损伤</span>
+          <span class="row__v ${S.mountain < 70 ? 'is-down' : ''}">${Math.round(100 - S.mountain)}%</span>
+        </div>
+        <div class="row">
+          <span class="row__y">治</span>
+          <span class="row__t">现在治要花</span>
+          <span class="row__v is-down">${debt} 万元</span>
+        </div>
+      </div>
     </div>
 
     <div class="decision">
       <p class="decision__t">矿要不要关</p>
       <p class="decision__d">
-        关掉，收入立刻掉到十位数，几十个人失业，明年这个时候账上可能就是二十几万。
-        不关，山还能再撑十几年，石头还有得卖。
+        关掉，收入立刻掉到十位数，几十个人失业。
+        ${
+          reserveLeft > 40
+            ? '但山才动了一点，现在治还治得起。'
+            : '而且山已经挖掉一大半了，治理这笔钱，比早几年贵得多。'
+        }
+      </p>
+      <p class="decision__d">
+        不关，矿还能再撑着。可债是记着的，越往后越贵。
       </p>
       <p class="decision__d">
         这是个不可逆的决定。关了就开不回来了。
@@ -331,13 +382,19 @@ function renderDecision() {
 
   panelEl.querySelector('#lg-close')?.addEventListener('click', () => {
     const before = S.cash;
+    /* 修复欠账：山被挖掉多少，就得花多少钱治。
+       这是关矿越晚越吃亏的核心机制：欠账随山体损伤线性增长。 */
+    const debt = Math.round((100 - S.mountain) * 2.2);
+
     S.pledged = true;
     S.closedMineYear = S.year;
+    S.repairDebt = debt;
     S.mode = 'restore';
-    S.cash = Math.round(before * 0.12);
+    S.cash = Math.max(0, Math.round(before * 0.35) - debt + 10);
+
     S.rows.unshift({
       year: S.year,
-      mode: '关矿',
+      mode: `关矿（修复 ${debt} 万）`,
       income: S.cash - before,
       cash: S.cash,
       mountain: Math.round(S.mountain),
@@ -357,9 +414,9 @@ function renderDecision() {
 }
 
 function renderOver() {
-  const gained = S.rows.filter((r) => r.income > 60).length;
-  const low = Math.min(...S.rows.map((r) => r.income));
+  const low = Math.min(...S.rows.map((r) => r.income), S.cash);
   const closed = S.closedMineYear !== null;
+  const spent = S.reserve <= 0;
 
   panelEl.innerHTML = `
     <div class="ledger__head">
@@ -386,28 +443,55 @@ function renderOver() {
           <div class="gauge__fill gauge__fill--mountain" style="width:${S.mountain}%"></div>
         </div>
       </div>
+      <div class="gauge">
+        <div class="gauge__head">
+          <span>矿还剩下多少</span>
+          <b class="${spent ? 'is-spent' : ''}">${
+            spent ? '挖完了' : Math.round((S.reserve / RESERVE_FULL) * 100) + ' %'
+          }</b>
+        </div>
+        <div class="gauge__track">
+          <div class="gauge__fill gauge__fill--ore" style="width:${
+            Math.max(0, (S.reserve / RESERVE_FULL) * 100)
+          }%"></div>
+        </div>
+      </div>
     </div>
 
     <div class="verdict">
       <p class="verdict__t">
         ${
           closed
-            ? S.mountain > 70
+            ? S.mountain > 85
               ? '山养回来了'
-              : '山还在缓'
-            : '矿挖到底了'
+              : S.mountain > 60
+                ? '山还在缓'
+                : '山刚缓过一口气'
+            : spent
+              ? '石头卖完了，山也秃了'
+              : '矿还没挖完'
         }
       </p>
       <p>
         ${
           closed
-            ? `你在 ${S.closedMineYear} 年把矿关了。那一年账上最难看的数字是 ${low} 万，
-               后来慢慢回来了。到这一年，山还剩 ${Math.round(S.mountain)}%，村集体年收入 ${S.cash} 万。`
-            : `你一直没关矿。矿越挖越薄，收益一年比一年少，到现在山只剩 ${Math.round(S.mountain)}%，
-               村集体年收入 ${S.cash} 万。挖出来的坑要修复，得另外花钱。`
+            ? `你在 ${S.closedMineYear} 年把矿关了，光是把山治回能看的样子，就先掏了 ${S.repairDebt} 万。
+               那一年账上最难看的数字是 ${low} 万。到这一年，山还剩 ${Math.round(S.mountain)}%，
+               村集体年收入 ${S.cash} 万。`
+            : `你一直没关矿。${
+                spent ? '矿在 2021 年前后挖完了，' : '矿到现在也没剩多少了，'
+              }山只剩 ${Math.round(S.mountain)}%，村集体年收入 ${S.cash} 万。
+               挖出来的坑要修复，这笔钱村里还没算过。`
         }
       </p>
       <p class="dim" style="margin-top:0.8rem;font-size:0.84rem;color:var(--ink-300)">
+        ${
+          closed
+            ? `那年要是再拖六年，光治理这一项就要多花 ${Math.round(
+                (100 - Math.max(0, S.mountain - 6 * 3.4)) * 2.2 - S.repairDebt
+              )} 万。`
+            : '早关一年，要治的山就少一分。'
+        }
         这是推演，不是真实数据。真实的账比这复杂得多，也慢得多。
       </p>
     </div>
@@ -427,8 +511,6 @@ function renderOver() {
 
   // 每局结束提交一次，记录最好成绩；失败不影响继续玩
   void saveRun();
-
-  void gained;
 }
 
 async function saveRun() {

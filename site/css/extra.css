@@ -514,6 +514,74 @@
   margin-bottom: var(--s3);
   padding-bottom: 0.3rem;
   border-bottom: 1px solid rgba(195, 198, 189, 0.65);
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+/* 每个选项的耗电提示 */
+.tern__cost {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--ink-300);
+  font-weight: 400;
+}
+
+/* 预算条 */
+.tern__budget {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: var(--s5);
+  padding: 0.6rem 0.85rem;
+  background: rgba(109, 143, 138, 0.09);
+  border-left: 2px solid var(--water);
+  border-radius: 2px;
+}
+
+.tern__budget span {
+  font-size: 0.86rem;
+  color: var(--ink-500);
+}
+
+.tern__budget b {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink-900);
+  letter-spacing: 0.02em;
+}
+
+.tern__budget i {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--ink-300);
+}
+
+.tern__budget.is-over {
+  background: rgba(157, 58, 48, 0.08);
+  border-left-color: var(--cinnabar);
+}
+
+.tern__budget.is-over b {
+  color: var(--cinnabar);
+}
+
+/* 选项里的耗电数字 */
+.opt__n em {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--ink-300);
+  margin-left: 0.32rem;
+  vertical-align: 0.12em;
+}
+
+.tern__tip.is-warn {
+  color: var(--cinnabar);
 }
 
 .tern__opts {
@@ -712,7 +780,10 @@
 
 @media (max-width: 860px) {
   .bird {
-    grid-template-columns: 1fr;
+    /* 必须是 minmax(0, 1fr)，不能写 1fr。
+       1fr 等于 minmax(auto, 1fr)，最小宽度由子元素撑开，
+       站点横向列表会把整个面板顶到 1000px 以上，窄屏直接溢出。 */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .bird__side {
@@ -743,7 +814,7 @@
   }
 
   .rec__body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rec__birdart {

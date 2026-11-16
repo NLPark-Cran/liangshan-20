@@ -190,7 +190,8 @@
 
 @media (max-width: 820px) {
   .hero__inner {
-    grid-template-columns: 1fr;
+    /* 裸 1fr 的最小宽度由内容决定，窄屏会顶出去 */
+    grid-template-columns: minmax(0, 1fr);
   }
   .hero__right {
     display: none;
@@ -804,7 +805,7 @@
 
 @media (max-width: 900px) {
   .site {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .site__art {
     min-height: 34vh;
@@ -1006,6 +1007,20 @@
   background: var(--bamboo);
 }
 
+/* 矿的进度条：暗赭石，挖完了会变灰 */
+.gauge__fill--ore {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--ochre) 0 4px,
+    rgba(177, 129, 63, 0.55) 4px 8px
+  );
+}
+
+.gauge__head b.is-spent {
+  color: var(--ink-300);
+  font-weight: 400;
+}
+
 /* 决策与操作 */
 .acts {
   flex: none;
@@ -1075,7 +1090,7 @@
 
 @media (max-width: 900px) {
   .ledger {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .ledger__stage {
     min-height: 32vh;
