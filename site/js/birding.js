@@ -235,10 +235,12 @@ async function doDraw(typhoon = false) {
   const stage = document.getElementById('bird-stage');
   if (!stage) return;
 
-  // 优先走后端判定；后端不可用时退回本地抽签，页面照常能玩
+  // 只有正式登录的用户才走后端判定；
+  // 游客没有凭证，请求必然 401，白发一次往返，直接本地抽签。
+  const isMember = auth.ready && auth.online && auth.user && auth.user.kind === 'member';
   let rec = null;
   let serverId = null;
-  if (auth.ready && auth.online) {
+  if (isMember) {
     try {
       const r = await drawBird(currentSite.id, typhoon);
       if (r.ok && r.record) {
