@@ -6,16 +6,28 @@
  * 稀有度按真实记录频率分级。
  */
 
-import { SITES, RARITY, HABITATS, TYPHOON_NAMES, makeRecord, allSpecies, TOTAL_SPECIES } from '../data/birds.js';
+import { SITES, RARITY, HABITATS, KIND_LABEL, TYPHOON_NAMES, makeRecord, allSpecies, TOTAL_SPECIES } from '../data/birds.js';
 import { inkStroke, mulberry32, hexA, seal } from './brush.js';
 import { mountain, treeShape, haze, water } from './inkfig.js';
 import { auth, drawBird } from './api.js';
+import { loadStickerIndex, stickerUrl, stickerCredit, warmUp } from './sticker.js';
 
 const STORE_KEY = 'liangshan20.birdlog.v1';
 
 /** 转义，用于拼 HTML */
 function esc(s) {
   return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/**
+ * 生境的显示名。
+ * 优先按 kind（地质类型，如「丘陵」）取，取不到再退回 scene（绘制场景名，如「ridge」）。
+ * 两者不是一回事：平湖九龙山 kind 是丘陵，画面上用的却是 ridge 那套山形。
+ */
+function habitatLabel(site) {
+  const byKind = KIND_LABEL[site.kind];
+  if (byKind) return byKind;
+  return HABITATS[site.scene]?.label || '';
 }
 
 /* ────────────────────────── 本地存档 ────────────────────────── */
@@ -53,6 +65,11 @@ export function initBirding() {
   if (!panelEl) return;
   renderShell();
   bindShell();
+
+  // 贴纸索引异步加载，不阻塞首屏；到了之后重绘当前画面
+  loadStickerIndex().then((idx) => {
+    if (idx) renderShell();
+  });
 }
 
 /** 打开观鸟手账（由外部调用） */
@@ -62,7 +79,11 @@ export function openBirding() {
   ov.hidden = false;
   document.body.style.overflow = 'hidden';
   requestAnimationFrame(() => ov.classList.add('is-open'));
-  renderShell();
+  loadStickerIndex().then(() => {
+    renderShell();
+    // 预取当前地点最容易抽到的几种，翻页时不用等
+    warmUp(currentSite.species.filter((s) => s.r === 'C' || s.r === 'U').map((s) => s.s));
+  });
 }
 
 export function closeBirding() {
@@ -98,7 +119,7 @@ function renderShell() {
                     aria-selected="${s.id === currentSite.id}"
                     data-site="${s.id}">
               <span class="sitechip__n">${s.name}</span>
-              <span class="sitechip__m">${s.region} · ${HABITATS[s.scene]?.label || ''}</span>
+              <span class="sitechip__m">${s.region} · ${habitatLabel(s)}</span>
             </button>`
           ).join('')}
         </div>
@@ -106,9 +127,9 @@ function renderShell() {
         <div class="bird__prog">
           <div class="bird__progt">
             <span>已记录</span>
-            <b>${seenCount}<i> / ${TOTAL_SPECIES}</i></b>
+            <b><span id="bird-seen">${seenCount}</span><i> / ${TOTAL_SPECIES}</i></b>
           </div>
-          <div class="bird__bar"><div class="bird__barfill" style="width:${(seenCount / TOTAL_SPECIES) * 100}%"></div></div>
+          <div class="bird__bar"><div class="bird__barfill" id="bird-barfill" style="width:${(seenCount / TOTAL_SPECIES) * 100}%"></div></div>
           <button class="btn btn--ghost bird__allbtn" id="bird-all">看全部图鉴</button>
         </div>
       </aside>
@@ -122,6 +143,18 @@ function renderShell() {
   renderStage();
 }
 
+/**
+ * 只刷新左侧的进度计数，不重建整个面板。
+ * 翻一页之后必须调用，否则「已记录」会停在上一次的数字上。
+ */
+function updateProgress() {
+  const n = Object.keys(log.seen).length;
+  const seenEl = document.getElementById('bird-seen');
+  const barEl = document.getElementById('bird-barfill');
+  if (seenEl) seenEl.textContent = String(n);
+  if (barEl) barEl.style.width = `${(n / TOTAL_SPECIES) * 100}%`;
+}
+
 function bindShell() {
   panelEl.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-site]');
@@ -129,6 +162,7 @@ function bindShell() {
       currentSite = SITES.find((s) => s.id === chip.dataset.site) || SITES[0];
       typhoonActive = false;
       renderShell();
+      warmUp(currentSite.species.filter((s) => s.r === 'C' || s.r === 'U').map((s) => s.s));
       return;
     }
 
@@ -168,7 +202,7 @@ function renderStage() {
       <div class="bird__kicker">
         <span>${site.region}</span>
         <span aria-hidden="true">·</span>
-        <span>${HABITATS[site.scene]?.label || ''}</span>
+        <span>${habitatLabel(site)}</span>
         <span aria-hidden="true">·</span>
         <span>${site.alt}</span>
       </div>
@@ -227,6 +261,9 @@ async function doDraw(typhoon = false) {
   log.seen[key] = (log.seen[key] || 0) + 1;
   saveLog(log);
 
+  // 左侧计数必须跟着变，否则要刷新才看得到新数字
+  updateProgress();
+
   const r = RARITY[rec.rarity] || RARITY.C;
 
   const typhoonLine = rec.typhoon
@@ -249,7 +286,10 @@ async function doDraw(typhoon = false) {
       ${typhoonLine}
 
       <div class="rec__body">
-        <canvas class="rec__birdart" id="rec-bird" aria-label="${rec.species}的轮廓"></canvas>
+        <div class="rec__artwrap">
+          <img class="rec__birdpic" src="${stickerUrl(rec.species) || ''}" alt="${rec.species}" decoding="async" />
+          <canvas class="rec__birdart" id="rec-bird" aria-label="${rec.species}的轮廓"></canvas>
+        </div>
         <div class="rec__info">
           <h3 class="rec__name">${rec.species}</h3>
           <p class="rec__en">${rec.speciesEn}</p>
@@ -267,11 +307,19 @@ async function doDraw(typhoon = false) {
         <button class="btn btn--ghost" id="bird-back">回到 ${rec.siteName}</button>
         <button class="btn btn--seal" id="bird-draw">再翻一页</button>
       </div>
+
+      ${stickerCredit() ? `<p class="rec__credit">${stickerCredit()}</p>` : ''}
     </article>
   `;
 
+  // 贴纸优先。代码画的轮廓始终垫在底层，贴纸加载成功就盖住它；
+  // 贴纸 404 或没有这一种，就露出轮廓，不至于开天窗。
+  const pic = stage.querySelector('.rec__birdpic');
   const cv = document.getElementById('rec-bird');
   if (cv) drawBirdSilhouette(cv, rec.species, r.color);
+  if (pic) {
+    pic.addEventListener('error', () => pic.classList.add('is-off'), { once: true });
+  }
 }
 
 function pickTyphoon() {
@@ -315,7 +363,13 @@ function renderCodex() {
               ${list
                 .map((sp) => {
                   const got = !!seen[sp.s];
+                  const thumb = got ? stickerUrl(sp.s) : '';
                   return `<div class="cg ${got ? 'is-got' : ''}">
+                    ${
+                      thumb
+                        ? `<img class="cg__pic" src="${thumb}" alt="${sp.s}" decoding="async" />`
+                        : `<span class="cg__pic cg__pic--none">${got ? '·' : '？'}</span>`
+                    }
                     <span class="cg__n">${got ? sp.s : '？'}</span>
                     <span class="cg__s">${got ? sp.sites.slice(0, 2).join(' / ') : '未记录'}</span>
                   </div>`;

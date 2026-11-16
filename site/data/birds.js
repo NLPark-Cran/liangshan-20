@@ -26,20 +26,20 @@ export const SITES = [
   {
     id: 'jiulongshan',
     name: '九龙山',
-    region: '丽水遂昌',
-    kind: '山脊',
-    alt: '1100m 山脊',
-    note: '春秋两季的猛禽迁徙通道，站在山脊上看它们借气流盘旋而过，一批一批往南。',
-    seasons: ['春', '秋'],
-    best: '秋分前后',
+    region: '嘉兴平湖',
+    kind: '丘陵',
+    alt: '滨海丘陵 161m',
+    note: '乍浦镇的海边丘陵，浙江秋天看猛禽最集中的地方。丘陵起伏，白天生出上升气流，鸟贴着这条线一批一批往南。',
+    seasons: ['秋'],
+    best: '十月中旬',
     scene: 'ridge',
     species: [
-      { s: '凤头蜂鹰', en: 'Crested Honey Buzzard', r: 'U', n: '数十只一批', tip: '头小颈长，翅膀宽，迁徙时常成群借上升气流盘旋' },
-      { s: '松雀鹰', en: 'Besra', r: 'U', n: '数只', tip: '体型小，扇翅快，常在林缘突袭' },
-      { s: '灰脸鵟鹰', en: 'Grey-faced Buzzard', r: 'U', n: '成群', tip: '脸颊灰色，迁徙集群，秋季过境主角之一' },
-      { s: '赤腹鹰', en: 'Chinese Sparrowhawk', r: 'U', n: '数只', tip: '翼尖黑色，雄鸟胸腹栗红' },
-      { s: '白颈长尾雉', en: "Elliot's Pheasant", r: 'R', n: '偶见', tip: '中国特有种，林下活动，清晨鸣声可辨' },
-      { s: '黄腹角雉', en: "Cabot's Tragopan", r: 'X', n: '极难见', tip: '国家一级保护，林下隐蔽，多见于保护区核心区' },
+      { s: '灰脸鵟鹰', en: 'Grey-faced Buzzard', r: 'C', n: '数千只', tip: '过境主力，占九成。脸颊灰色，迁徙时结大群盘旋' },
+      { s: '凤头蜂鹰', en: 'Crested Honey Buzzard', r: 'U', n: '数百只', tip: '头小颈长，翅膀宽，爱在上升气流里打转' },
+      { s: '日本松雀鹰', en: 'Japanese Sparrowhawk', r: 'U', n: '数十只', tip: '体型小，扇翅快，掠过时像一道影子' },
+      { s: '赤腹鹰', en: 'Chinese Sparrowhawk', r: 'U', n: '数只', tip: '翼尖黑色。雄鸟胸腹栗红，雌鸟偏褐' },
+      { s: '蛇雕', en: 'Crested Serpent Eagle', r: 'R', n: '偶见', tip: '翅膀宽圆，翼下有大白斑，常单独盘旋鸣叫' },
+      { s: '乌雕', en: 'Greater Spotted Eagle', r: 'X', n: '极难见', tip: '国家一级保护，深褐色大猛禽，翼下覆羽浅色' },
     ],
   },
   {
@@ -266,12 +266,25 @@ export const TYPHOON_NAMES = [
 
 export const HABITATS = {
   ridge: { label: '山脊', icon: '△' },
+  hill: { label: '滨海丘陵', icon: '⌒' },
   lake: { label: '湖沼', icon: '〇' },
   wetland: { label: '湿地农田', icon: '≡' },
   reed: { label: '芦苇水网', icon: '〰' },
   tidal: { label: '滨海滩涂', icon: '≈' },
   island: { label: '海岛礁岩', icon: '◇' },
   forest: { label: '山林', icon: '⋀' },
+};
+
+/* kind 是中文的，显示名要能直接按 kind 取 */
+export const KIND_LABEL = {
+  丘陵: '滨海丘陵',
+  湖沼: '湖沼',
+  湿地农田: '湿地农田',
+  湿地: '湿地农田',
+  滨海滩涂: '滨海滩涂',
+  海岛: '海岛礁岩',
+  山林: '山林',
+  山脊: '山脊',
 };
 
 /* ────────────────────────── 抽签逻辑 ────────────────────────── */
@@ -316,12 +329,16 @@ export function makeRecord(site, opts = {}) {
     ? ['晴', '多云', '阴', '晴间多云']
     : site.kind === '山脊'
     ? ['晴', '多云', '阴', '雾']
+    : site.kind === '丘陵'
+    ? ['晴', '多云', '晴间多云', '阴']
     : ['晴', '多云', '阴', '小雨'];
 
   const winds = typhoon
     ? ['偏东 9 级', '东南 10 级', '偏南 8 级']
     : site.kind === '山脊'
     ? ['东北 3 级', '北 2 级', '东风 4 级']
+    : site.kind === '丘陵'
+    ? ['东北 3 级', '东风 4 级', '东南 3 级']
     : ['微风', '东南 2 级', '静风', '北 3 级'];
 
   return {

@@ -26,6 +26,9 @@ export class ScrollController {
     this.minOffset = 0;
     this.maxOffset = 0;
     this.raf = null;
+    this.wheelRaf = null; // 滚轮缓动帧
+    this.wheelTarget = 0; // 滚轮期望到达的位移
+    this.wheelActive = false;
     this.dragging = false;
     this.lastX = 0;
     this.lastT = 0;
@@ -46,6 +49,7 @@ export class ScrollController {
     this.maxOffset = 0;
     this.minOffset = Math.min(0, vw - tw);
     this.offset = Math.max(this.minOffset, Math.min(this.maxOffset, this.offset));
+    this.wheelTarget = this.offset;
     this._apply();
   }
 
@@ -80,7 +84,7 @@ export class ScrollController {
     this.onProgress(this.progress);
   }
 
-  _animateTo(target, smooth) {
+  _animateTo(target, smooth, dur = 620) {
     if (this.raf) cancelAnimationFrame(this.raf);
     const from = this.offset;
     const to = this._clamp(target);
@@ -90,7 +94,6 @@ export class ScrollController {
       return;
     }
     const t0 = performance.now();
-    const dur = 620;
     const step = (now) => {
       const t = Math.min(1, (now - t0) / dur);
       // easeOutQuint 的近似，配合 CSS 的 cubic 感觉
@@ -101,6 +104,70 @@ export class ScrollController {
       else this.raf = null;
     };
     this.raf = requestAnimationFrame(step);
+  }
+
+  /** 滚轮驱动的缓动帧：向 wheelTarget 逼近，接近静止再考虑吸附 */
+  _startWheelGlide() {
+    if (this.wheelRaf) return; // 已经在跑，只更新目标即可
+
+    let idle = 0; // 连续多少帧几乎没有位移
+
+    const step = () => {
+      const target = this.wheelTarget ?? this.offset;
+      const diff = target - this.offset;
+
+      // 指数逼近：每帧吃掉剩余距离的 18%，手感接近原生滚动惯性
+      this.offset += diff * 0.18;
+      if (Math.abs(target - this.offset) < 0.4) this.offset = target;
+      this._apply();
+
+      const moving = Math.abs(diff) > 0.8;
+      idle = moving ? 0 : idle + 1;
+
+      // 还有距离就继续追；停稳 12 帧（约 200ms）后收尾
+      if (Math.abs(target - this.offset) > 0.4) {
+        this.wheelRaf = requestAnimationFrame(step);
+        return;
+      }
+
+      if (idle < 12) {
+        this.wheelRaf = requestAnimationFrame(step);
+        return;
+      }
+
+      // 真正停下来了，才判断要不要吸附
+      this.wheelRaf = null;
+      this.wheelActive = false;
+      this._settleAfterWheel();
+    };
+
+    this.wheelRaf = requestAnimationFrame(step);
+  }
+
+  /** 滚轮停下后的收尾：只有明显偏了才吸附，否则让用户停在原地 */
+  _settleAfterWheel() {
+    if (!this.points.length) return;
+
+    const center = -this.offset + this.viewW * 0.5;
+    let best = 0;
+    let bestD = Infinity;
+    this.points.forEach((p, i) => {
+      const d = Math.abs(this.pxOf(p.u) - center);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+
+    // 已经离某一站很近（12% 屏宽内），吸附过去让人看清
+    // 离得远说明用户是想自由浏览，就停在原地，不要拽走
+    if (bestD < this.viewW * 0.12) {
+      this.activeIndex = best;
+      this._animateTo(this._clamp(this.viewW * 0.5 - this.pxOf(this.points[best].u)), true, 380);
+      this.onFocus(best);
+    }
+    this.wheelTarget = this.offset;
+    this.onProgress(this.progress);
   }
 
   /** 松手后找最近点位并吸附 */
@@ -139,10 +206,16 @@ export class ScrollController {
       this.lastX = e.clientX;
       this.lastT = performance.now();
       this.velocity = 0;
+      // 手指接管，滚轮的缓动立刻让位，否则两边抢同一个 offset
       if (this.raf) {
         cancelAnimationFrame(this.raf);
         this.raf = null;
       }
+      if (this.wheelRaf) {
+        cancelAnimationFrame(this.wheelRaf);
+        this.wheelRaf = null;
+      }
+      this.wheelActive = false;
       v.classList.add('is-dragging');
       v.setPointerCapture(e.pointerId);
     });
@@ -169,6 +242,9 @@ export class ScrollController {
         /* 指针已释放 */
       }
 
+      // 拖完把滚轮目标对齐到当前位置，避免下次滚轮从旧目标起跳
+      this.wheelTarget = this.offset;
+
       // 惯性
       if (Math.abs(this.velocity) > 1.6) {
         const glide = () => {
@@ -192,18 +268,34 @@ export class ScrollController {
     v.addEventListener('pointercancel', end);
 
     // 滚轮：竖向滚动转横向
+    //
+    // 早期实现是「每格直接 += 105px，停手 160ms 后强制吸附，吸附动画 620ms」，
+    // 结果是手指还在动，动画已经在往回拽，体验像被抢方向盘。
+    // 现在改成：滚轮只累积一个目标位移，由统一的缓动帧逐步逼近，
+    // 停手后先让动量自然衰减，衰减到几乎静止才吸附到最近点位。
     v.addEventListener(
       'wheel',
       (e) => {
-        // 如果按住 shift 或本来就是横向滚动，直接用
+        // 横向滚动优先；触控板横向滑动时 deltaX 才是主分量
         const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        if (Math.abs(d) < 1) return;
+        if (Math.abs(d) < 0.5) return;
+
+        // 触控板会连续发大量小增量，鼠标滚轮则是离散的大增量。
+        // 用 deltaMode 修正：0=像素 1=行 2=页
+        const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.viewW : 1;
+
+        // 归一化到「像素」，但要压掉过大的一格（部分浏览器一格 deltaY 可达 300）
+        let px = d * unit * 1.6;
+        px = Math.max(-420, Math.min(420, px));
+
         e.preventDefault();
         this.hasInteracted = true;
-        this.offset = this._clamp(this.offset - d * 1.05);
-        this._apply();
-        if (this._wheelTimer) clearTimeout(this._wheelTimer);
-        this._wheelTimer = setTimeout(() => this._snap(), 160);
+
+        // 累积到目标位移，而不是直接改当前位移
+        this.wheelTarget = this._clamp((this.wheelTarget ?? this.offset) - px);
+        this.wheelActive = true;
+
+        this._startWheelGlide();
       },
       { passive: false }
     );
