@@ -19,3 +19,11 @@ Thumbs.db
 
 # 临时文件
 .git-msg-*.txt
+
+# Lux3D 原始产物：单件 12-20MB，只保留压缩后的 .min.glb
+# 原始件在 D:\aholo-work\glb，需要重新生成时跑 tools/sync_models.mjs
+site/assets/models/*.glb
+!site/assets/models/*.min.glb
+
+# 资产压缩的临时目录
+.glb-stage/

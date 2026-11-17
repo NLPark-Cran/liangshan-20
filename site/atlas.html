@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>浙江六村 · 微缩地形档案</title>
+<meta name="description" content="六件由 Aholo Lux3D 生成的浙江乡村微缩地形模型，可拖动、可缩放、可逐件细看。">
+<link rel="stylesheet" href="css/base.css">
+<style>
+  :root {
+    --paper: #f2ece0;
+    --paper-2: #eae2d2;
+    --ink: #2c312b;
+    --ink-2: #5c635a;
+    --ink-3: #8b9187;
+    --line: rgba(44, 49, 43, 0.14);
+    --accent: #9d3a30;
+    --stage-h: 62vh;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* 顶部：栏目名与状态，克制的一行 */
+  .top {
+    position: fixed; inset: 0 0 auto 0; z-index: 30;
+    display: flex; align-items: center; gap: 18px;
+    padding: 14px clamp(16px, 3vw, 40px);
+    background: linear-gradient(180deg, rgba(242,236,224,.96), rgba(242,236,224,.72) 70%, transparent);
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  .top > * { pointer-events: auto; }
+  .brand {
+    font-weight: 600; letter-spacing: .04em; font-size: 15px;
+    display: flex; align-items: baseline; gap: 9px;
+  }
+  .brand small {
+    font-weight: 400; font-size: 11px; letter-spacing: .12em;
+    color: var(--ink-3); text-transform: uppercase;
+  }
+  .top__spacer { flex: 1; }
+  #hud {
+    font-size: 11.5px; color: var(--ink-2); letter-spacing: .03em;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: center; gap: 9px;
+  }
+  #hud b { color: var(--ink); font-weight: 600; }
+  .hud__bar {
+    display: inline-block; width: 42px; height: 2px;
+    background: rgba(44,49,43,.16); position: relative; overflow: hidden;
+  }
+  .hud__bar > i {
+    position: absolute; inset: 0 auto 0 0;
+    background: var(--accent); transition: width .5s ease;
+  }
+  .top__link {
+    font-size: 12px; color: var(--ink-2); text-decoration: none;
+    border-bottom: 1px solid var(--line); padding-bottom: 2px;
+    transition: color .2s, border-color .2s;
+  }
+  .top__link:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* 3D 舞台 */
+  .stage-wrap {
+    position: relative;
+    height: var(--stage-h);
+    min-height: 420px;
+    margin-top: 52px;
+  }
+  #stage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: grab;
+  }
+  #stage:active { cursor: grabbing; }
+
+  /* 舞台下方：左侧资料，右侧索引 */
+  .below {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: clamp(20px, 4vw, 56px);
+    padding: clamp(24px, 3.5vw, 52px) clamp(16px, 3vw, 40px) 80px;
+    max-width: 1400px;
+    margin: 0 auto;
+    align-items: start;
+  }
+
+  #info {
+    border-top: 2px solid var(--ink);
+    padding-top: 18px;
+    min-height: 210px;
+  }
+  .info__kicker {
+    font-size: 11.5px; letter-spacing: .14em; color: var(--ink-3);
+    text-transform: uppercase; margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .info__title {
+    font-family: "Noto Serif SC", "Songti SC", Georgia, serif;
+    font-size: clamp(30px, 4vw, 46px);
+    font-weight: 600; letter-spacing: .04em;
+    margin: 0 0 12px;
+    line-height: 1.15;
+  }
+  .info__tag {
+    font-size: 14.5px; color: var(--ink-2); margin: 0 0 22px;
+    line-height: 1.7; max-width: 30em;
+  }
+  .info__rows {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px; margin: 0;
+    border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  .info__rows > div { min-width: 0; }
+  .info__rows dt {
+    font-size: 10.5px; letter-spacing: .1em; color: var(--ink-3);
+    text-transform: uppercase; margin-bottom: 5px;
+  }
+  .info__rows dd {
+    margin: 0; font-size: 13.5px; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  /* 索引：六条，可点 */
+  #rail {
+    display: flex; flex-direction: column;
+    border-top: 2px solid var(--ink);
+  }
+  .rail__item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: baseline; gap: 12px;
+    padding: 15px 4px;
+    border: 0; border-bottom: 1px solid var(--line);
+    background: none; cursor: pointer; text-align: left;
+    font: inherit; color: inherit;
+    transition: background .18s, padding-left .18s;
+  }
+  .rail__item:hover { background: rgba(157, 58, 48, .045); padding-left: 10px; }
+  .rail__item.is-on { background: rgba(157, 58, 48, .075); padding-left: 10px; }
+  .rail__item.is-on .rail__name { color: var(--accent); }
+  .rail__dot { font-size: 10px; color: var(--ink-3); line-height: 1; }
+  .rail__item.is-on .rail__dot { color: var(--accent); }
+  .rail__name {
+    font-family: "Noto Serif SC", "Songti SC", Georgia, serif;
+    font-size: 17px; font-weight: 600; letter-spacing: .03em;
+    transition: color .18s;
+  }
+  .rail__region {
+    font-size: 11.5px; color: var(--ink-3); letter-spacing: .05em;
+    white-space: nowrap;
+  }
+
+  /* 底部说明 */
+  .foot {
+    border-top: 1px solid var(--line);
+    padding: 22px clamp(16px, 3vw, 40px) 46px;
+    max-width: 1400px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; gap: 8px 28px;
+    font-size: 11.5px; color: var(--ink-3); line-height: 1.8;
+  }
+  .foot b { color: var(--ink-2); font-weight: 500; }
+
+  /* 载入遮罩 */
+  #boot {
+    position: fixed; inset: 0; z-index: 90;
+    display: grid; place-items: center;
+    background: var(--paper);
+    transition: opacity .5s ease, visibility .5s;
+  }
+  #boot.is-done { opacity: 0; visibility: hidden; }
+  .boot__inner { text-align: center; }
+  .boot__title {
+    font-family: "Noto Serif SC", "Songti SC", Georgia, serif;
+    font-size: 20px; letter-spacing: .22em; color: var(--ink-2);
+  }
+  .boot__bar {
+    width: 132px; height: 1px; background: var(--line);
+    margin: 18px auto 0; overflow: hidden; position: relative;
+  }
+  .boot__bar::after {
+    content: ""; position: absolute; inset: 0;
+    background: var(--accent);
+    animation: sweep 1.15s ease-in-out infinite;
+    transform-origin: left;
+  }
+  @keyframes sweep {
+    0% { transform: translateX(-100%) scaleX(.35); }
+    55% { transform: translateX(20%) scaleX(.75); }
+    100% { transform: translateX(100%) scaleX(.35); }
+  }
+
+  /* 窄屏 */
+  @media (max-width: 860px) {
+    :root { --stage-h: 46vh; }
+    .below { grid-template-columns: 1fr; gap: 30px; }
+    .info__rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .info__rows dd { font-size: 12.5px; }
+    .brand small { display: none; }
+  }
+  @media (max-width: 420px) {
+    .info__rows { grid-template-columns: 1fr 1fr; }
+    .rail__item { grid-template-columns: 16px minmax(0, 1fr); }
+    .rail__region { grid-column: 2; font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .boot__bar::after { animation: none; transform: scaleX(1); }
+    * { transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="boot"><div class="boot__inner">
+  <div class="boot__title">展台就位中</div>
+  <div class="boot__bar"></div>
+</div></div>
+
+<header class="top">
+  <div class="brand">浙江六村<small>3D Terrain Atlas</small></div>
+  <div class="top__spacer"></div>
+  <div id="hud">载入中</div>
+  <a class="top__link" href="index.html">返回长卷</a>
+</header>
+
+<div class="stage-wrap">
+  <canvas id="stage" aria-label="六个浙江乡村的微缩三维地形，可拖动旋转、滚轮缩放"></canvas>
+</div>
+
+<section class="below">
+  <div id="info" aria-live="polite"></div>
+  <nav id="rail" aria-label="点位索引"></nav>
+</section>
+
+<footer class="foot">
+  <span><b>六件地形模型</b>由 Aholo Lux3D 文生 3D 生成，G1 版本，100k 面起。</span>
+  <span><b>资产管线</b>gltf-transform 压缩：WebP 纹理 + meshopt，16MB 落盘压到 1MB 上下。</span>
+  <span><b>操作</b>拖动平移，滚轮推拉，左右方向键切换点位。</span>
+</footer>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/loaders/": "./vendor/three/loaders/"
+  }
+}
+</script>
+<script type="module" src="js/atlas3d.js"></script>
+</body>
+</html>

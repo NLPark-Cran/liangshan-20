@@ -254,7 +254,7 @@ async function doDraw(typhoon = false) {
 
   if (!rec) {
     const luck = Math.random();
-    rec = makeRecord(currentSite, { typhoon, luck });
+    rec = makeRecord(currentSite, { typhoon, luck, seen: log.seen });
   }
 
   // 本地存档：只存到这台设备，用于离线时的图鉴

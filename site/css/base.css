@@ -265,6 +265,7 @@ em {
   position: relative;
   transition: background 0.25s, color 0.25s, border-color 0.25s;
   text-indent: 0.16em;
+  text-decoration: none;
 }
 
 .btn::after {

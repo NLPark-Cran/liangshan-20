@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function init() {
+  // 任何一步卡住都不该让「展卷」遮罩一直盖着首屏。
+  // 最多等 4 秒，然后把页面交给用户。
+  const failsafe = setTimeout(() => {
+    document.getElementById('boot')?.classList.add('is-done');
+  }, 4000);
+
   initOverlay();
   initBirding();
   initStats();
@@ -51,14 +57,18 @@ async function init() {
   bindAuthEvents();
 
   try {
-    const res = await fetch('data/zhejiang.json');
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch('data/zhejiang.json', { signal: ctrl.signal });
     state.geojson = await res.json();
+    clearTimeout(t);
   } catch (e) {
     console.error('边界数据载入失败', e);
   }
 
   buildScroll();
 
+  clearTimeout(failsafe);
   setTimeout(() => document.getElementById('boot')?.classList.add('is-done'), 380);
 
   // 首屏背景在布局稳定后补一次重绘，避免首帧拿到 0 尺寸
@@ -141,13 +151,14 @@ function drawHeroArt() {
   const cv = document.getElementById('hero-bg');
   if (!cv) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  // 首帧时 hero 可能还没完成布局，getBoundingClientRect 会拿到 0，
-  // 于是掉进 320 的兜底值，轴比就错了。优先取父容器尺寸。
+  // 只量 .hero。canvas 的 width/height 属性会变成它的固有尺寸，
+  // 一旦量自己就会读到上一轮放大后的值，每重绘一次再涨一圈。
   const parent = cv.parentElement;
-  const rect = cv.getBoundingClientRect();
-  const prect = parent ? parent.getBoundingClientRect() : rect;
-  const w = Math.max(rect.width, prect.width, 320);
-  const h = Math.max(rect.height, prect.height, 320);
+  const prect = parent ? parent.getBoundingClientRect() : null;
+  const w = Math.max(prect ? prect.width : 0, 320);
+  const h = Math.max(prect ? prect.height : 0, 320);
+  // CSS 已经把画布锁成 100%×100%。这里只设位图分辨率，
+  // 不再让属性值反过来决定布局尺寸。
   cv.width = Math.round(w * dpr);
   cv.height = Math.round(h * dpr);
   const ctx = cv.getContext('2d');

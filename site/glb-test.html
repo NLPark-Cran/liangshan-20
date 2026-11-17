@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLB 渲染验证</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4efe4; overflow: hidden; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 16px; top: 14px; z-index: 9;
+    font: 12px/1.7 ui-sans-serif, system-ui, "PingFang SC", sans-serif;
+    color: #4a4f48; background: rgba(244,239,228,.86);
+    padding: 10px 14px; border-radius: 4px; white-space: pre;
+  }
+  #hud b { font-weight: 600; color: #2c312b; }
+</style>
+</head>
+<body>
+<div id="hud">载入中…</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/loaders/": "./vendor/three/loaders/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from './vendor/three/libs/meshopt_decoder.module.js';
+
+const hud = document.getElementById('hud');
+const t0 = performance.now();
+const log = (s) => { hud.textContent = s; };
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#f4efe4');
+scene.fog = new THREE.Fog('#f4efe4', 6, 20);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 2.2, 4.6);
+camera.lookAt(0, 0.2, 0);
+
+// 光：主光偏右上前，补光从左后压暗，再加一层天穹环境光
+const key = new THREE.DirectionalLight('#fff6e8', 2.6);
+key.position.set(4, 7, 5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 30;
+key.shadow.camera.left = -4;
+key.shadow.camera.right = 4;
+key.shadow.camera.top = 4;
+key.shadow.camera.bottom = -4;
+key.shadow.bias = -0.0006;
+key.shadow.normalBias = 0.02;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight('#cfe0e8', 0.85);
+rim.position.set(-5, 3, -4);
+scene.add(rim);
+
+scene.add(new THREE.HemisphereLight('#dfe8ea', '#c8b89a', 0.9));
+scene.add(new THREE.AmbientLight('#ffffff', 0.25));
+
+// 承托：圆形纸面 + 接触阴影
+const paper = new THREE.Mesh(
+  new THREE.CircleGeometry(3.2, 96),
+  new THREE.MeshStandardMaterial({ color: '#efe7d8', roughness: 0.95, metalness: 0 })
+);
+paper.rotation.x = -Math.PI / 2;
+paper.position.y = -0.02;
+paper.receiveShadow = true;
+scene.add(paper);
+
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+const MODEL = new URLSearchParams(location.search).get('m') || 'yucun.min';
+loader.load(
+  `/assets/models/${MODEL}.glb`,
+  (gltf) => {
+    const root = gltf.scene;
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // 归一化到统一尺度，方便六个点位并排
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    const scale = 2.6 / maxDim;
+    root.scale.setScalar(scale);
+    root.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        if (o.material) {
+          o.material.envMapIntensity = 0.6;
+          // Lux3D 的 PBR 贴图偏暗，抬一点粗糙度的下限
+          if (o.material.roughness !== undefined) {
+            o.material.roughness = Math.max(0.55, o.material.roughness);
+          }
+        }
+      }
+    });
+    scene.add(root);
+
+    const ms = Math.round(performance.now() - t0);
+    let meshes = 0, tris = 0;
+    root.traverse((o) => {
+      if (o.isMesh && o.geometry) {
+        meshes++;
+        const idx = o.geometry.index;
+        tris += (idx ? idx.count : o.geometry.attributes.position.count) / 3;
+      }
+    });
+    log(`已载入\n${ms} ms\n尺寸 ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}\n网格 ${meshes} · 三角面 ${Math.round(tris).toLocaleString()}\n缩放 ${scale.toFixed(3)}`);
+    window.__ok = true;
+    window.__stat = { ms, meshes, tris: Math.round(tris) };
+  },
+  (p) => {
+    if (p.total) log(`载入中 ${Math.round((p.loaded / p.total) * 100)}%\n${(p.loaded / 1048576).toFixed(1)} / ${(p.total / 1048576).toFixed(1)} MB`);
+  },
+  (e) => { log('载入失败\n' + e.message); window.__err = String(e.message); }
+);
+
+// 缓慢旋转，验证交互与性能
+let dragging = false, px = 0, rot = 0, auto = true;
+renderer.domElement.addEventListener('pointerdown', (e) => { dragging = true; px = e.clientX; auto = false; });
+addEventListener('pointerup', () => { dragging = false; });
+addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  rot += (e.clientX - px) * 0.008;
+  px = e.clientX;
+});
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let frames = 0, fpsT = performance.now(), fps = 0;
+function tick() {
+  requestAnimationFrame(tick);
+  if (auto) rot += 0.0022;
+  scene.rotation.y = rot;
+  renderer.render(scene, camera);
+  frames++;
+  const now = performance.now();
+  if (now - fpsT > 1000) {
+    fps = Math.round((frames * 1000) / (now - fpsT));
+    frames = 0; fpsT = now;
+    window.__fps = fps;
+  }
+}
+tick();
+</script>
+</body>
+</html>

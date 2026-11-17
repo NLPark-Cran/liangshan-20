@@ -34,8 +34,12 @@ async function call(path, opts = {}) {
 /* ────────────────────────── 健康与启动 ────────────────────────── */
 
 export async function checkHealth() {
+  // 后端无响应时必须尽快放弃，否则 init() 卡在 await 上，
+  // 首屏的「展卷」遮罩永远不消失。
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
   try {
-    const r = await call('/health', { method: 'GET' });
+    const r = await call('/health', { method: 'GET', signal: ctrl.signal });
     auth.online = !!r.ok;
     auth.ready = true;
     return auth.online;
@@ -43,6 +47,8 @@ export async function checkHealth() {
     auth.online = false;
     auth.ready = true;
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
