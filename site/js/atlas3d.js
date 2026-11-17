@@ -13,18 +13,35 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from '../vendor/three/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from '../vendor/three/libs/meshopt_decoder.module.js';
+// 六站文案与数据只有一份来源，长卷和 3D 展台共用，避免两处说法不一致。
+import SITE_POINTS from './points.js';
 
 /* ────────────────────────── 数据 ────────────────────────── */
 
 const POINTS = [
-  { id: 'yucun', name: '余村', region: '湖州安吉', tag: '两山理念诞生地', year: '2005' },
-  { id: 'xiajiang', name: '下姜村', region: '杭州淳安', tag: '从穷山村到绿富美', year: '2003' },
-  { id: 'qianjiangyuan', name: '钱江源', region: '衢州开化', tag: '国家公园体制试点', year: '2016' },
-  { id: 'yunhe', name: '云和梯田', region: '丽水云和', tag: '全球重要农业文化遗产', year: '2022' },
-  { id: 'pujiang', name: '浦江', region: '金华浦江', tag: '五水共治起点', year: '2013' },
-  { id: 'xinxinqiao', name: '新溪桥', region: '嘉兴', tag: '平原水乡的数字化', year: '2024' },
+  { id: 'yucun', name: '余村', region: '湖州安吉', tag: '两山理念诞生地', year: '2005', yaw: -0.22 },
+  { id: 'xiajiang', name: '下姜村', region: '杭州淳安', tag: '从穷山村到绿富美', year: '2003', yaw: -0.10 },
+  // 钱江源的侧壁上有一块资产自带的厂牌，正面朝向避开它会把整片岩壁转到镜头前，
+  // 反而压掉了溪谷本身。这里保留最佳观赏面，厂牌落到画面外的侧后方。
+  { id: 'qianjiangyuan', name: '钱江源', region: '衢州开化', tag: '国家公园体制试点', year: '2016', yaw: -0.34 },
+  { id: 'yunhe', name: '云和梯田', region: '丽水云和', tag: '全球重要农业文化遗产', year: '2022', yaw: -0.22 },
+  { id: 'pujiang', name: '浦江', region: '金华浦江', tag: '五水共治起点', year: '2013', yaw: -0.10 },
+  { id: 'xinxinqiao', name: '新溪桥', region: '嘉兴', tag: '平原水乡的数字化', year: '2024', yaw: Math.PI - 0.22 },
 ];
+
+// 展台只负责模型与呈现；文案与数据一律取自 points.js 的那一份。
+const CONTENT = new Map(SITE_POINTS.map((p) => [p.id, p]));
+for (const p of POINTS) {
+  const c = CONTENT.get(p.id);
+  if (!c) continue;
+  p.tag = c.tag || p.tag;
+  p.lead = c.lead || '';
+  p.data = c.data || [];
+  p.quote = c.quote || null;
+  p.chapter = c.chapter || '';
+}
 
 /* ────────────────────────── 场景 ────────────────────────── */
 
@@ -42,6 +59,13 @@ renderer.toneMappingExposure = 1.06;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#f2ece0');
 scene.fog = new THREE.Fog('#f2ece0', 14, 34);
+
+// 环境贴图：水面和陶土都要有东西可反射，否则 PBR 材质只剩漫反射，看着发白。
+// RoomEnvironment 是纯程序生成的室内光板，不额外下载资源。
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.42;
+pmrem.dispose();
 
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 200);
 
@@ -109,16 +133,18 @@ function normalize(root, target = 2.5) {
   const maxDim = Math.max(size.x, size.z) || 1;
   const s = target / maxDim;
   root.scale.setScalar(s);
-  root.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+  // 轻微下沉：资产自带的厂牌水印烘在侧壁最下沿，沉进托盘刚好遮住，
+  // 也让摆件看着是嵌在台面上，而不是浮在上头。
+  const sink = size.y * s * 0.075;
+  root.position.set(-center.x * s, -box.min.y * s - sink, -center.z * s);
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.receiveShadow = true;
+    // 材质保持资产原样：梯田水面的反光靠低 roughness，
+    // 之前统一抬到 0.62 以上会把水面抹成哑光白，梯田就糊了。
     const m = o.material;
-    if (m) {
-      m.envMapIntensity = 0.55;
-      if (m.roughness !== undefined) m.roughness = Math.min(1, Math.max(0.62, m.roughness));
-    }
+    if (m) m.envMapIntensity = 0.8;
   });
   return { size, tris: countTris(root) };
 }
@@ -148,7 +174,7 @@ function loadOne(i) {
         const info = normalize(gltf.scene);
         holder.add(gltf.scene);
         holder.position.set(i * SPACING, 0, 0);
-        holder.rotation.y = -0.22 + (i % 3) * 0.12;
+        holder.rotation.y = p.yaw ?? -0.22;
         scene.add(holder);
 
         slots[i] = { group: holder, ready: true, tris: info.tris, ms: Math.round(performance.now() - t0) };
@@ -210,17 +236,19 @@ let active = 0;
 const cam = {
   x: 0, // 目标横向位置（世界坐标）
   dist: 9.6,
-  pitch: 0.46, // 俯仰，弧度
+  pitch: 0.72, // 俯仰，弧度
   yaw: 0,
   // 平滑量
-  cx: 0, cdist: 9.6, cpitch: 0.46, cyaw: 0,
+  cx: 0, cdist: 9.6, cpitch: 0.72, cyaw: 0,
 };
 
 function focus(i) {
   active = i;
   cam.x = i * SPACING;
   cam.dist = 6.6;
-  cam.pitch = 0.38;
+  // 俯视角：地形摆件要看得见上面那层山水，
+  // 侧壁既不承载内容，也避开了资产自带的厂牌水印。
+  cam.pitch = 0.72;
   showInfo(i);
   updateRail();
 }
@@ -229,15 +257,38 @@ function showInfo(i) {
   const p = POINTS[i];
   const s = slots[i] || {};
   const panel = document.getElementById('info');
+
+  const data = (p.data || []).slice(0, 4);
+  const rows = data.length
+    ? `<dl class="info__data">${data
+        .map(
+          (d) => `
+          <div class="info__row">
+            <dt>${d.k}</dt>
+            <dd><b>${d.v}</b>${d.note ? `<span>${d.note}</span>` : ''}${
+              d.source ? `<i>${d.source}</i>` : ''
+            }</dd>
+          </div>`,
+        )
+        .join('')}</dl>`
+    : '';
+
+  const quote = p.quote?.text
+    ? `<blockquote class="info__quote">
+         <p>${p.quote.text}</p>
+         ${p.quote.cite ? `<cite>${p.quote.cite}</cite>` : ''}
+       </blockquote>`
+    : '';
+
   panel.innerHTML = `
-    <div class="info__kicker">${p.region} · ${p.year}</div>
+    <div class="info__kicker">${p.region} · ${p.chapter || ''}</div>
     <h2 class="info__title">${p.name}</h2>
-    <p class="info__tag">${p.tag}</p>
-    <dl class="info__rows">
-      <div><dt>三角面</dt><dd>${s.ready ? s.tris.toLocaleString() : '未就位'}</dd></div>
-      <div><dt>载入</dt><dd>${s.ready ? s.ms + ' ms' : '—'}</dd></div>
-      <div><dt>来源</dt><dd>Lux3D 生成</dd></div>
-    </dl>
+    <p class="info__lead">${p.lead || p.tag}</p>
+    ${rows}
+    ${quote}
+    <p class="info__foot">
+      地形模型 Lux3D 生成 · ${s.ready ? s.tris.toLocaleString() + ' 面' : '未就位'}
+    </p>
   `;
   panel.classList.add('is-on');
 }
