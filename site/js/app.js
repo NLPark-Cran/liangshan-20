@@ -234,7 +234,7 @@ function buildScroll() {
   const vw = viewport.clientWidth || window.innerWidth;
   const vh = viewport.clientHeight || window.innerHeight * 0.82;
 
-  // 段：卷首 + 六站 + 卷尾
+  // 段：卷首 + 各站 + 卷尾
   const segs = [
     { kind: 'cover', title: '卷首', w: vw * 1.05 },
     ...POINTS.map((p, i) => ({ kind: 'site', point: p, index: i, title: p.name, w: vw })),
@@ -277,8 +277,8 @@ function buildScroll() {
       cap.className = 'panel__cover';
       cap.innerHTML = `
         <p class="panel__coverkicker">浙 江</p>
-        <h2 class="panel__covertitle">六 地</h2>
-        <p class="panel__coverdesc">从一条江的源头，到一座被关掉的矿，到一块租给城里人的菜地。</p>
+        <h2 class="panel__covertitle">十 地</h2>
+        <p class="panel__coverdesc">从一条江的源头，到一座被关掉的矿，到一块租给城里人的菜地，再到一座把海水里的碳卖出去的岛。</p>
       `;
       el.appendChild(cap);
     }
@@ -429,7 +429,7 @@ function drawPanel(panel, total, index) {
   }
 }
 
-/** 卷首：浙江全省，比例正确，六个点位落真实经纬度 */
+/** 卷首：浙江全省，比例正确，各点位落真实经纬度 */
 function drawCoverPanel(ctx, w, h) {
   if (!state.geojson) {
     ctx.fillStyle = '#f4efe4';

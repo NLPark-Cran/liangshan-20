@@ -1,5 +1,5 @@
 /**
- * scenes.js — 六个点位的水墨场景 v3
+ * scenes.js — 各点位的水墨场景 v3
  *
  * 构图按南宋山水的办法来：
  *
@@ -31,6 +31,8 @@ import {
   boat,
   reeds,
   stone,
+  bridge,
+  bird,
   groundWash,
   skyWash,
 } from './inkfig.js';
@@ -1429,6 +1431,1126 @@ export function sceneYunhe(ctx, w, h, seed = 4001) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   七 · 西溪：整幅是水，三条堤横切，水汊像巷子从堤间穿过去
+   ══════════════════════════════════════════════════════════ */
+
+export function sceneXixi(ctx, w, h, seed = 7001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.055, from: 0, to: 0.34 });
+
+  /* 西山只剩一道影：西溪四周已经是城，山退得很远 */
+  farRange(ctx, w, h, {
+    baseY: 0.245,
+    amp: 0.045,
+    alpha: 0.12,
+    seed: seed + 11,
+    peaks: [
+      { cx: 0.05, half: 0.17, h: 1, tilt: 0.3, sharp: 1.45 },
+      { cx: 0.23, half: 0.18, h: 0.64, tilt: -0.16, sharp: 1.3 },
+      { cx: 0.43, half: 0.19, h: 0.34, tilt: 0.1, sharp: 1.2 },
+    ],
+    fade: [[0, 0.85], [0.7, 0.4], [1, 0]],
+  });
+
+  /* 水：不画满，留纸当水。只有几笔极淡的青灰横着过去 */
+  const waterTop = softEdge(-w * 0.03, w * 1.03, h * 0.3, h * 0.006, seed + 21, 36);
+  washArea(ctx, waterTop.concat([[w * 1.03, h * 1.03], [-w * 0.03, h * 1.03]]), {
+    color: '#6d8f8a',
+    a0: 0.012,
+    a1: 0.095,
+    yTop: h * 0.29,
+    yBot: h,
+  });
+  inkStroke(ctx, waterTop, {
+    color: '#8d948a',
+    width: 1.1,
+    alpha: 0.22,
+    seed: seed + 23,
+    wobble: 0.7,
+    dry: 0.42,
+    layers: 1,
+    taper: false,
+    step: 5,
+  });
+  mist(ctx, { x: -w * 0.04, y: h * 0.285, w: w * 0.62, h: h * 0.05, seed: seed + 27, strength: 0.7, blobs: 4 });
+
+  /* 水汊：几条极窄的水道，从远堤一直穿到画外，左右稍微偏，才不像尺子比的 */
+  const channels = [
+    [[w * 0.185, h * 0.3], [w * 0.176, h * 0.36], [w * 0.158, h * 0.505], [w * 0.148, h * 0.7], [w * 0.134, h * 1.02]],
+    [[w * 0.395, h * 0.3], [w * 0.402, h * 0.36], [w * 0.415, h * 0.505], [w * 0.432, h * 0.7], [w * 0.458, h * 1.02]],
+    [[w * 0.298, h * 0.345], [w * 0.302, h * 0.505], [w * 0.292, h * 0.7], [w * 0.276, h * 1.02]],
+    [[w * 0.292, h * 0.7], [w * 0.336, h * 0.86], [w * 0.372, h * 1.02]],
+  ];
+
+  channels.forEach((path, ci) => {
+    const left = [];
+    const right = [];
+    path.forEach(([x, y], i) => {
+      const t = i / (path.length - 1);
+      const dx = w * (0.0042 + t * 0.0062);
+      left.push([x - dx, y]);
+      right.push([x + dx, y]);
+    });
+    // 汊底一道更淡的水：巷子越往里越浅
+    washArea(ctx, left.concat(right.slice().reverse()), {
+      color: '#6d8f8a',
+      a0: 0.05,
+      a1: 0.16,
+      yTop: h * 0.3,
+      yBot: h,
+    });
+    // 只压一侧岸：两侧都画就成了铁轨
+    inkStroke(ctx, ci % 2 === 0 ? left : right, {
+      color: '#2b2f2b',
+      width: 1.7,
+      alpha: 0.4,
+      seed: seed + 40 + ci * 9,
+      wobble: 0.7,
+      dry: 0.26,
+      layers: 2,
+      taper: false,
+      step: 4,
+    });
+    inkStroke(ctx, ci % 2 === 0 ? right : left, {
+      color: '#5a625b',
+      width: 1,
+      alpha: 0.18,
+      seed: seed + 60 + ci * 9,
+      wobble: 0.6,
+      dry: 0.5,
+      layers: 1,
+      taper: false,
+      step: 5,
+    });
+  });
+
+  /* 堤：一条土，上缘重、下缘淡，堤脚在水里落一道暗影 */
+  const dike = (y, th, segs, sd, alpha) => {
+    segs.forEach(([x0, x1], si) => {
+      const top = softEdge(x0, x1, y, th * 0.12, sd + si * 5, 24);
+      const bot = softEdge(x0, x1, y + th, th * 0.2, sd + si * 5 + 2, 24);
+      washArea(ctx, top.concat(bot.slice().reverse()), {
+        color: '#6f8055',
+        a0: alpha * 0.5,
+        a1: alpha * 0.1,
+        yTop: y,
+        yBot: y + th,
+      });
+      // 堤脚的影：贴着下缘的一道淡墨，堤才不是贴在纸上的色块
+      const shade = bot.map(([x, yy], i) => [x, yy + th * (0.5 + (i % 3) * 0.12)]);
+      inkStroke(ctx, shade, {
+        color: '#5a625b',
+        width: 1.6,
+        alpha: alpha * 0.5,
+        seed: sd + si * 11 + 1,
+        wobble: 0.8,
+        dry: 0.5,
+        layers: 1,
+        taper: true,
+        step: 5,
+      });
+      inkStroke(ctx, top, {
+        color: '#2b2f2b',
+        width: 1.9,
+        alpha: 0.42,
+        seed: sd + si * 11 + 3,
+        wobble: 0.9,
+        dry: 0.3,
+        layers: 2,
+        taper: true,
+        step: 4,
+      });
+      // 堤上的草与土坡：几笔短短的竖，断断续续，不排成齿
+      const r = mulberry32(sd + si * 31);
+      const n = Math.round((x1 - x0) / (w * 0.016));
+      for (let i = 0; i < n; i++) {
+        if (r() > 0.55) continue;
+        const x = x0 + (x1 - x0) * ((i + 0.4 + r() * 0.3) / n);
+        const hh = th * (0.45 + r() * 0.6);
+        inkStroke(ctx, [[x, y + th * 0.75], [x + (r() - 0.5) * th * 0.5, y + th * 0.75 - hh]], {
+          color: '#3a3f38',
+          width: 0.8,
+          alpha: 0.22,
+          seed: sd + 500 + si * 41 + i,
+          wobble: 0.2,
+          dry: 0.2,
+          layers: 1,
+          taper: true,
+          step: 2,
+        });
+      }
+    });
+  };
+
+  dike(h * 0.345, h * 0.017, [[-w * 0.03, w * 0.163], [w * 0.189, w * 0.385], [w * 0.412, w * 0.74]], seed + 100, 0.3);
+  dike(h * 0.505, h * 0.024, [[-w * 0.03, w * 0.144], [w * 0.172, w * 0.288], [w * 0.316, w * 0.401], [w * 0.430, w * 0.6]], seed + 120, 0.34);
+  dike(h * 0.7, h * 0.034, [[-w * 0.03, w * 0.134], [w * 0.162, w * 0.278], [w * 0.306, w * 0.418], [w * 0.446, w * 0.51]], seed + 140, 0.36);
+
+  /* 柿树：一株矮干，梢头三丛点叶，叶子往下垂。不画成风车 */
+  const persimmon = (x, y, s, sd) => {
+    const r = mulberry32(sd);
+    inkStroke(ctx, [[x, y], [x + (r() - 0.5) * s * 0.18, y - s * 0.62]], {
+      color: '#2b2f2b',
+      width: Math.max(0.8, s * 0.09),
+      alpha: 0.4,
+      seed: sd,
+      wobble: 0.14,
+      dry: 0.16,
+      layers: 1,
+      taper: true,
+      step: 2,
+    });
+    // 三根短枝，往不同方向挑出去
+    const tips = [];
+    for (let k = 0; k < 3; k++) {
+      const dir = k === 0 ? -0.55 : k === 1 ? 1.05 : 0.2;
+      const side = k === 0 ? -1 : k === 1 ? 1 : -0.2;
+      const tx = x + side * s * (0.16 + r() * 0.12);
+      const ty = y - s * (0.56 + r() * 0.12) - Math.abs(side) * s * 0.06;
+      inkStroke(ctx, [[x, y - s * 0.6], [tx, ty]], {
+        color: '#2b2f2b',
+        width: Math.max(0.6, s * 0.05),
+        alpha: 0.34,
+        seed: sd + 3 + k,
+        wobble: 0.1,
+        dry: 0.2,
+        layers: 1,
+        taper: true,
+        step: 2,
+      });
+      tips.push([tx, ty, dir]);
+    }
+    // 每根枝头一丛叶：三笔短点，朝上散开
+    tips.forEach(([tx, ty], ti) => {
+      for (let j = 0; j < 4; j++) {
+        const a = -Math.PI / 2 + (j - 1.5) * 0.42 + (r() - 0.5) * 0.2;
+        const ll = s * (0.18 + r() * 0.1);
+        const px = tx + (r() - 0.5) * s * 0.08;
+        const py = ty + (r() - 0.5) * s * 0.05;
+        inkStroke(ctx, [[px, py], [px + Math.cos(a) * ll, py + Math.sin(a) * ll]], {
+          color: '#333f2c',
+          width: Math.max(1.1, s * 0.13),
+          alpha: 0.3,
+          seed: sd + 20 + ti * 7 + j,
+          wobble: 0.08,
+          dry: 0,
+          layers: 1,
+          taper: true,
+          step: 2,
+        });
+      }
+      // 一颗柿子：极小的一点赭
+      inkStroke(ctx, [[tx + s * 0.06, ty + s * 0.06], [tx + s * 0.1, ty + s * 0.08]], {
+        color: '#8a6b3f',
+        width: Math.max(1.6, s * 0.2),
+        alpha: 0.34,
+        seed: sd + 60 + ti,
+        wobble: 0,
+        dry: 0,
+        layers: 1,
+        taper: true,
+        step: 2,
+      });
+    });
+  };
+
+  const rows = [
+    { y: h * 0.345, xs: [0.02, 0.062, 0.1, 0.138, 0.212, 0.248, 0.284, 0.322, 0.36, 0.436, 0.474, 0.51, 0.56, 0.61, 0.67, 0.72], s: 11, sd: seed + 300 },
+    { y: h * 0.505, xs: [0.012, 0.052, 0.09, 0.126, 0.196, 0.232, 0.262, 0.336, 0.364, 0.452, 0.492, 0.532, 0.575], s: 15, sd: seed + 340 },
+    { y: h * 0.7, xs: [0.01, 0.046, 0.088, 0.186, 0.222, 0.256, 0.33, 0.362, 0.462, 0.498], s: 19, sd: seed + 380 },
+  ];
+  rows.forEach((row, ri) => {
+    row.xs.forEach((u, i) => {
+      const x = w * u;
+      const y = row.y - h * (0.004 + ri * 0.003);
+      persimmon(x, y, row.s * (0.86 + ((i * 37) % 9) / 26), row.sd + i * 13);
+    });
+  });
+
+  /* 零星白墙黑瓦：只落在中堤左端，三五间，不成村 */
+  houseRow(ctx, {
+    seed: seed + 500,
+    alpha: 0.46,
+    tone: '#f4efe4',
+    toneAlpha: 0.9,
+    list: [
+      [w * 0.056, h * 0.492, 24, 0],
+      [w * 0.104, h * 0.5, 20, 1],
+      [w * 0.238, h * 0.494, 19, 0],
+    ],
+  });
+
+  /* 岸边芦苇：压住近堤的左端，也压住画角 */
+  reeds(ctx, w * 0.03, h * 0.735, { size: 52, count: 7, seed: seed + 601, alpha: 0.3, dir: 1 });
+  reeds(ctx, w * 0.196, h * 0.73, { size: 40, count: 4, seed: seed + 607, alpha: 0.24, dir: -1 });
+  reeds(ctx, w * 0.44, h * 0.885, { size: 34, count: 4, seed: seed + 611, alpha: 0.2, dir: 1 });
+
+  /* 一条摇橹船，停在堤外的水面上，是全幅唯一会动的东西 */
+  boat(ctx, w * 0.318, h * 0.79, { size: 26, seed: seed + 701, alpha: 0.32 });
+
+  /* 前景：左下一株垂柳，冠压住水，画面才有个近处 */
+  treeShape(ctx, w * 0.045, h * 1.02, {
+    size: 150,
+    seed: seed + 901,
+    color: '#2f3a29',
+    alpha: 0.46,
+    canopy: '#44523a',
+    canopyAlpha: 0.16,
+    shape: 'willow',
+  });
+  stone(ctx, w * 0.15, h * 0.985, { w: w * 0.05, h: h * 0.016, seed: seed + 911, alpha: 0.24, moss: 2 });
+}
+
+/* ══════════════════════════════════════════════════════════
+   八 · 大陈岛：左重山压海，右小岛留一道海峡，海上铺着网箱
+   ══════════════════════════════════════════════════════════ */
+
+export function sceneDachendao(ctx, w, h, seed = 8001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.08, from: 0, to: 0.38 });
+
+  /* 海平线：一道极淡的线，把天与海分开，两端都化掉 */
+  inkStroke(ctx, softEdge(-w * 0.03, w * 0.95, h * 0.398, h * 0.003, seed + 9, 30), {
+    color: '#7c8b88',
+    width: 1,
+    alpha: 0.2,
+    seed: seed + 10,
+    wobble: 0.35,
+    dry: 0.55,
+    layers: 1,
+    taper: false,
+    step: 5,
+  });
+  cloudBand(ctx, w * 0.05, h * 0.19, w * 0.4, { alpha: 0.55, seed: seed + 14, rows: 2 });
+  bird(ctx, w * 0.335, h * 0.29, { size: 12, alpha: 0.28, seed: seed + 16 });
+  bird(ctx, w * 0.362, h * 0.272, { size: 9, alpha: 0.24, seed: seed + 17 });
+
+  /* 左岛：主峰顶在左端，山脊向右一级一级断下去。三峰都在水里立着 */
+  mountain(ctx, w, h, {
+    seed: seed + 21,
+    baseY: h * 0.398,
+    amp: h * 0.242,
+    footY: h * 0.652,
+    tone: '#3f4a38',
+    toneAlpha: 0.3,
+    lineColor: '#22282a',
+    lineAlpha: 0.62,
+    lineWidth: 2.3,
+    texture: 4.6,
+    peaks: [
+      { cx: 0.028, half: 0.16, h: 1, tilt: 0.34, sharp: 1.85, crest: 2.3 },
+      { cx: 0.2, half: 0.108, h: 0.64, tilt: -0.26, sharp: 1.6, crest: 2 },
+      { cx: 0.3, half: 0.07, h: 0.38, tilt: 0.2, sharp: 1.4, crest: 1.8 },
+    ],
+    fade: [[0, 1], [0.55, 0.94], [0.88, 0.34], [1, 0.06]],
+    shade: [-0.02, 0.12, 0.2],
+    footFade: 0.34,
+    band: 0.1,
+    veins: 4,
+    moss: 8,
+  });
+
+  /* 右岛：矮一截，隔一道海峡。近处这一侧也是崖，不用圆坡收边 */
+  mountain(ctx, w, h, {
+    seed: seed + 29,
+    baseY: h * 0.42,
+    amp: h * 0.152,
+    footY: h * 0.612,
+    tone: '#46523f',
+    toneAlpha: 0.22,
+    lineColor: '#2b2f2b',
+    lineAlpha: 0.46,
+    lineWidth: 1.8,
+    texture: 3,
+    peaks: [
+      { cx: 0.545, half: 0.13, h: 1, tilt: -0.2, sharp: 1.7, crest: 2.1 },
+      { cx: 0.655, half: 0.095, h: 0.5, tilt: 0.16, sharp: 1.45, crest: 1.9 },
+    ],
+    fade: [[0, 0.45], [0.32, 0.96], [0.7, 0.4], [1, 0.03]],
+    shade: [0.62, 0.72, 0.14],
+    footFade: 0.5,
+    veins: 2,
+    moss: 4,
+  });
+
+  /* 两岛之间一道海雾：海峡的远，靠把墨擦掉 */
+  mist(ctx, { x: w * 0.26, y: h * 0.6, w: w * 0.36, h: h * 0.05, seed: seed + 31, strength: 0.5, blobs: 3 });
+
+  /* 海：从海平线往画外铺，越近越重；海峡那一道留得最亮 */
+  const seaTop = softEdge(-w * 0.03, w * 1.03, h * 0.418, h * 0.003, seed + 41, 34);
+  washArea(ctx, seaTop.concat([[w * 1.03, h * 1.03], [-w * 0.03, h * 1.03]]), {
+    color: '#6d8f8a',
+    a0: 0.05,
+    a1: 0.19,
+    yTop: h * 0.41,
+    yBot: h,
+  });
+
+  /* 水纹：分四层写，越近越长、越疏。横笔都不贯通，断在岛脚 */
+  const seaBands = [
+    { y0: 0.435, y1: 0.5, rows: 5, x0: 0.02, x1: 0.92, a: 0.2 },
+    { y0: 0.5, y1: 0.6, rows: 4, x0: 0.02, x1: 0.95, a: 0.24 },
+    { y0: 0.62, y1: 0.78, rows: 3, x0: 0.28, x1: 0.98, a: 0.26 },
+    { y0: 0.8, y1: 0.97, rows: 3, x0: 0.0, x1: 0.9, a: 0.22 },
+  ];
+  seaBands.forEach((b, bi) => {
+    water(ctx, w, h * b.y0, h * b.y1, {
+      seed: seed + 43 + bi * 17,
+      rows: b.rows,
+      alpha: b.a,
+      x0: b.x0,
+      x1: b.x1,
+    });
+  });
+
+  /* 海峡里几道横向的涌，压出两个岛之间的距离 */
+  for (let i = 0; i < 4; i++) {
+    const y = h * (0.545 + i * 0.03);
+    inkStroke(
+      ctx,
+      [
+        [w * (0.322 + i * 0.004), y],
+        [w * (0.36 + i * 0.006), y + h * 0.004],
+        [w * (0.398 + i * 0.009), y - h * 0.002],
+      ],
+      {
+        color: '#6d8f8a',
+        width: 1.1,
+        alpha: 0.24 - i * 0.04,
+        seed: seed + 50 + i,
+        wobble: 0.7,
+        dry: 0.42,
+        layers: 1,
+        taper: false,
+        step: 3,
+      }
+    );
+  }
+
+  /* 海蚀崖：山脚是切下去的，不是慢慢斜进水。崖线短、陡、带飞白 */
+  const cliff = (u, yTop, yBot, sd, a) => {
+    const pts = [
+      [w * u, h * yTop],
+      [w * (u + 0.003), h * (yTop + (yBot - yTop) * 0.55)],
+      [w * (u - 0.001), h * (yBot - (yBot - yTop) * 0.12)],
+      [w * (u - 0.004), h * yBot],
+    ];
+    inkStroke(ctx, pts, {
+      color: '#22282a',
+      width: 1.7,
+      alpha: a,
+      seed: sd,
+      wobble: 0.45,
+      dry: 0.4,
+      layers: 2,
+      taper: true,
+      step: 3,
+    });
+    // 崖脚那道白：浪打在石上，用留纸表现，只在崖脚擦一小条
+    mist(ctx, { x: w * (u - 0.028), y: h * (yBot - 0.008), w: w * 0.06, h: h * 0.022, seed: sd + 9, strength: 0.34, blobs: 2 });
+  };
+  cliff(0.012, 0.6, 0.648, seed + 70, 0.5);
+  cliff(0.052, 0.578, 0.632, seed + 73, 0.44);
+  cliff(0.104, 0.598, 0.645, seed + 76, 0.42);
+  cliff(0.158, 0.612, 0.652, seed + 79, 0.4);
+  cliff(0.232, 0.63, 0.66, seed + 82, 0.34);
+  cliff(0.286, 0.64, 0.662, seed + 85, 0.3);
+  cliff(0.505, 0.588, 0.618, seed + 88, 0.3);
+  cliff(0.572, 0.6, 0.626, seed + 91, 0.28);
+  cliff(0.63, 0.607, 0.63, seed + 94, 0.24);
+
+  /* 风机：立在脊线上的一排，细杆 + 三叶。山脊往下走，风机一点点小下去 */
+  const turbine = (x, y, s, sd) => {
+    const r = mulberry32(sd);
+    const hubY = y - s;
+    inkStroke(ctx, [[x, y], [x + s * 0.04, hubY]], {
+      color: '#2b2f2b',
+      width: Math.max(0.8, s * 0.06),
+      alpha: 0.5,
+      seed: sd,
+      wobble: 0.1,
+      dry: 0.08,
+      layers: 1,
+      taper: true,
+      step: 2,
+    });
+    const ph = r() * 1.2;
+    for (let k = 0; k < 3; k++) {
+      const a = -Math.PI / 2 + ph + (k * Math.PI * 2) / 3;
+      inkStroke(
+        ctx,
+        [
+          [x + s * 0.012, hubY],
+          [x + s * 0.012 + Math.cos(a) * s * 0.2, hubY + Math.sin(a) * s * 0.2],
+          [x + s * 0.012 + Math.cos(a) * s * 0.36, hubY + Math.sin(a) * s * 0.36],
+        ],
+        {
+          color: '#2b2f2b',
+          width: Math.max(0.5, s * 0.03),
+          alpha: 0.4,
+          seed: sd + 3 + k * 4,
+          wobble: 0.05,
+          dry: 0.1,
+          layers: 1,
+          taper: true,
+          step: 2,
+        }
+      );
+    }
+  };
+  [
+    [0.016, 0.176, 46],
+    [0.046, 0.163, 48],
+    [0.076, 0.176, 45],
+    [0.106, 0.2, 41],
+    [0.136, 0.228, 36],
+    [0.166, 0.252, 32],
+    [0.198, 0.276, 27],
+  ].forEach(([u, v, s], i) => turbine(w * u, h * v, s, seed + 800 + i * 17));
+
+  /* 网箱：一块一块独立的浮筏，两三笔围一个格子。行列是有的，但不连成一张网 */
+  const raft = (x, y, rw, rh, sd, a) => {
+    const quad = [
+      [x - rw, y],
+      [x - rw * 0.86, y - rh],
+      [x + rw, y - rh * 0.86],
+      [x + rw * 0.9, y + rh * 0.1],
+      [x - rw, y],
+    ];
+    inkStroke(ctx, quad, {
+      color: '#3a3f38',
+      width: 1.3,
+      alpha: a,
+      seed: sd,
+      wobble: 0.3,
+      dry: 0.28,
+      layers: 2,
+      taper: false,
+      step: 3,
+    });
+    // 浮子：四角各一点，标出这是一块筏
+    for (const [px, py] of [quad[0], quad[1], quad[2], quad[3]]) {
+      inkStroke(ctx, [[px - rw * 0.1, py], [px + rw * 0.1, py]], {
+        color: '#2b2f2b',
+        width: 2.2,
+        alpha: a * 0.8,
+        seed: sd + Math.round(px),
+        wobble: 0,
+        dry: 0,
+        layers: 1,
+        taper: false,
+        step: 2,
+      });
+    }
+  };
+  const rndR = mulberry32(seed + 1000);
+  for (let row = 0; row < 5; row++) {
+    const t = row / 4;
+    const y = h * (0.668 + Math.pow(t, 1.5) * 0.2);
+    const rw = w * (0.016 + t * 0.014);
+    const rh = h * (0.008 + t * 0.009);
+    const n = 7 + Math.round(t * 2);
+    for (let c = 0; c < n; c++) {
+      if (rndR() > 0.9) continue;
+      const x = w * (0.034 + t * 0.022 + c * (0.049 + t * 0.005)) + (rndR() - 0.5) * w * 0.004;
+      if (x > w * 0.5) continue;
+      raft(x, y + (rndR() - 0.5) * h * 0.004, rw * (0.85 + rndR() * 0.3), rh, seed + 1010 + row * 40 + c, 0.26 + t * 0.14);
+    }
+  }
+
+  /* 码头：密排的渔船，压住左下，是全幅唯一的热闹处 */
+  const rndB = mulberry32(seed + 1200);
+  for (let i = 0; i < 8; i++) {
+    const x = w * (0.03 + i * 0.024 + (rndB() - 0.5) * 0.005);
+    const y = h * (0.872 + i * 0.008 + (rndB() - 0.5) * 0.007);
+    boat(ctx, x, y, {
+      size: 16 + rndB() * 8,
+      seed: seed + 1210 + i * 13,
+      alpha: 0.4 + rndB() * 0.14,
+      figure: i % 3 === 0,
+    });
+  }
+  /* 码头那条石砌的岸 */
+  inkStroke(ctx, softEdge(-w * 0.02, w * 0.235, h * 0.858, h * 0.0035, seed + 1300, 20), {
+    color: '#22282a',
+    width: 2.2,
+    alpha: 0.44,
+    seed: seed + 1301,
+    wobble: 0.9,
+    dry: 0.34,
+    layers: 2,
+    taper: true,
+    step: 4,
+  });
+  /* 岸上的矮房与树：只三间，别把海挡住 */
+  houseRow(ctx, {
+    seed: seed + 1320,
+    alpha: 0.4,
+    tone: '#f4efe4',
+    toneAlpha: 0.8,
+    list: [
+      [w * 0.048, h * 0.848, 18, 0],
+      [w * 0.086, h * 0.842, 15, 1],
+      [w * 0.128, h * 0.85, 16, 0],
+    ],
+  });
+  treeGroup(ctx, { x: w * 0.105, y: h * 0.842, size: 26, count: 2, spread: 0.5, seed: seed + 1340, color: '#2f3a29', alpha: 0.34, canopyAlpha: 0.1 });
+
+  /* 前景：左下一块礁，压得最重 */
+  stone(ctx, w * 0.04, h * 0.975, { w: w * 0.14, h: h * 0.045, seed: seed + 1400, alpha: 0.42, width: 1.8, moss: 5 });
+  stone(ctx, w * 0.15, h * 1.0, { w: w * 0.1, h: h * 0.028, seed: seed + 1403, alpha: 0.32, moss: 3 });
+  rockCluster(ctx, w * 0.25, h * 0.978, { w: w * 0.07, h: h * 0.022, seed: seed + 1407, alpha: 0.22 });
+  reeds(ctx, w * 0.29, h * 0.958, { size: 30, count: 4, seed: seed + 1411, alpha: 0.2, dir: 1 });
+  groundWash(ctx, { w, y0: h * 0.958, y1: h * 1.02, color: '#3f4a38', alpha: 0.18, seed: seed + 1415, x0: 0, x1: 0.35 });
+}
+
+/* ══════════════════════════════════════════════════════════
+   九 · 桑基鱼塘：俯视的方格，全幅没有一座山
+   ══════════════════════════════════════════════════════════ */
+
+export function sceneSangji(ctx, w, h, seed = 9001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.055, from: 0, to: 0.2 });
+
+  /* 地平线压得很低：这里是平原，天只占一条 */
+  inkStroke(ctx, softEdge(-w * 0.03, w * 0.98, h * 0.318, h * 0.0028, seed + 9, 30), {
+    color: '#7c8b88',
+    width: 0.95,
+    alpha: 0.2,
+    seed: seed + 10,
+    wobble: 0.4,
+    dry: 0.5,
+    layers: 1,
+    taper: false,
+    step: 5,
+  });
+  /* 远处的树带与两间屋：只有一列影子，没有山 */
+  treeGroup(ctx, { x: w * 0.03, y: h * 0.315, size: 15, count: 5, spread: 1.4, seed: seed + 13, color: '#4a544a', alpha: 0.2, canopyAlpha: 0.06 });
+  treeGroup(ctx, { x: w * 0.2, y: h * 0.313, size: 13, count: 4, spread: 1.3, seed: seed + 17, color: '#4a544a', alpha: 0.16, canopyAlpha: 0.05 });
+  houseRow(ctx, { seed: seed + 21, alpha: 0.26, list: [[w * 0.115, h * 0.309, 11, 0], [w * 0.29, h * 0.31, 10, 1]] });
+  mist(ctx, { x: -w * 0.04, y: h * 0.325, w: w * 0.7, h: h * 0.042, seed: seed + 23, strength: 0.5, blobs: 4 });
+
+  /* 塘群：一层极淡的水色打底，塘基是方格，水面从格子里露出来 */
+  const fieldTop = softEdge(-w * 0.03, w * 0.99, h * 0.352, h * 0.003, seed + 31, 30);
+  washArea(ctx, fieldTop.concat([[w * 0.99, h * 1.02], [-w * 0.03, h * 1.02]]), {
+    color: '#6d8f8a',
+    a0: 0.02,
+    a1: 0.115,
+    yTop: h * 0.34,
+    yBot: h,
+  });
+
+  const vanishX = w * 0.12;
+  const yFar = h * 0.372;
+  const yNear = h * 1.02;
+  const rowsN = 10;
+  const rowY = [];
+  const rowTh = [];
+  for (let r = 0; r <= rowsN; r++) {
+    const t = r / rowsN;
+    rowY.push(yFar + (yNear - yFar) * Math.pow(t, 1.55));
+    rowTh.push(h * (0.0028 + t * t * 0.016));
+  }
+
+  /* 塘基线：远的一条细，近的一条厚；两条之间是高出水面的塘基 */
+  for (let r = 0; r < rowsN; r++) {
+    const y = rowY[r];
+    const th = rowTh[r];
+    const t = r / rowsN;
+    const x0 = -w * 0.03;
+    const x1 = w * (0.92 + t * 0.06);
+    const top = softEdge(x0, x1, y, th * 0.16, seed + 100 + r * 9, 26);
+    const bot = softEdge(x0, x1, y + th, th * 0.2, seed + 104 + r * 9, 26);
+    washArea(ctx, top.concat(bot.slice().reverse()), {
+      color: '#6f8055',
+      a0: 0.22,
+      a1: 0.07,
+      yTop: y,
+      yBot: y + th,
+    });
+    inkStroke(ctx, top, {
+      color: '#3a3f38',
+      width: 0.8 + t * 1.1,
+      alpha: 0.26 + t * 0.12,
+      seed: seed + 110 + r * 7,
+      wobble: 0.6,
+      dry: 0.34,
+      layers: 1,
+      taper: false,
+      step: 4,
+    });
+    inkStroke(ctx, bot, {
+      color: '#5a625b',
+      width: 0.7 + t * 0.8,
+      alpha: 0.16 + t * 0.1,
+      seed: seed + 130 + r * 7,
+      wobble: 0.6,
+      dry: 0.42,
+      layers: 1,
+      taper: false,
+      step: 4,
+    });
+  }
+
+  /* 溇港：横竖都通，几条直的把塘群切成棋盘。竖线往远处收，收到那个消失点 */
+  const colsN = 8;
+  for (let c = 0; c < colsN; c++) {
+    const u = c / (colsN - 1);
+    const xNear = w * (-0.05 + u * 0.98);
+    const xFar = vanishX + (xNear - vanishX) * 0.4;
+    const isChannel = c === 2 || c === 5;
+    const path = [];
+    for (let k = 0; k <= 6; k++) {
+      const t = k / 6;
+      const tt = Math.pow(t, 1.3);
+      path.push([
+        xFar + (xNear - xFar) * tt + Math.sin(t * 3 + c) * w * 0.002,
+        yFar + (yNear - yFar) * tt,
+      ]);
+    }
+    path.forEach(([x, y], i) => {
+      if (i === 0) return;
+      const prev = path[i - 1];
+      inkStroke(ctx, [prev, [x, y]], {
+        color: isChannel ? '#6d8f8a' : '#5a625b',
+        width: (isChannel ? 1.6 : 0.7) * (0.7 + i * 0.12),
+        alpha: (isChannel ? 0.3 : 0.2) * (0.7 + i * 0.1),
+        seed: seed + 200 + c * 11 + i,
+        wobble: 0.3,
+        dry: 0.36,
+        layers: 1,
+        taper: false,
+        step: 4,
+      });
+      // 塘基：水道两侧各一条细岸
+      if (isChannel) {
+        const dx = w * (0.0035 + i * 0.0009);
+        inkStroke(ctx, [[prev[0] - dx, prev[1]], [x - dx, y]], {
+          color: '#3a3f38',
+          width: 0.9,
+          alpha: 0.22,
+          seed: seed + 260 + c * 11 + i,
+          wobble: 0.25,
+          dry: 0.34,
+          layers: 1,
+          taper: false,
+          step: 3,
+        });
+        inkStroke(ctx, [[prev[0] + dx, prev[1]], [x + dx, y]], {
+          color: '#3a3f38',
+          width: 0.9,
+          alpha: 0.18,
+          seed: seed + 290 + c * 11 + i,
+          wobble: 0.25,
+          dry: 0.34,
+          layers: 1,
+          taper: false,
+          step: 3,
+        });
+      }
+    });
+  }
+
+  /* 桑树：沿塘基成行，是笔直的绿带。近处高、远处矮，一条带上一株挨一株 */
+  const rndS = mulberry32(seed + 400);
+  for (let r = 1; r < rowsN; r++) {
+    const t = r / rowsN;
+    const y = rowY[r] + rowTh[r] * 0.55;
+    const n = 9 + Math.round(t * 16);
+    const span = 0.9 - t * 0.22;
+    for (let i = 0; i < n; i++) {
+      const u = ((i + 0.5) / n) * span - 0.01 + (rndS() - 0.5) * 0.004;
+      const x = w * u;
+      const hs = h * (0.008 + t * 0.02) * (0.8 + rndS() * 0.4);
+      inkStroke(ctx, [[x, y], [x + (rndS() - 0.5) * hs * 0.16, y - hs]], {
+        color: '#4d5c3d',
+        width: Math.max(0.8, hs * 0.11),
+        alpha: 0.24 + t * 0.16,
+        seed: seed + 420 + r * 23 + i,
+        wobble: 0.12,
+        dry: 0.1,
+        layers: 1,
+        taper: true,
+        step: 2,
+      });
+      // 桑冠：两点，压住树顶
+      inkStroke(ctx, [[x - hs * 0.14, y - hs * 0.92], [x + hs * 0.16, y - hs * 1.02]], {
+        color: '#5d6b4b',
+        width: Math.max(1, hs * 0.2),
+        alpha: 0.22 + t * 0.14,
+        seed: seed + 480 + r * 23 + i,
+        wobble: 0.1,
+        dry: 0,
+        layers: 1,
+        taper: true,
+        step: 2,
+      });
+    }
+  }
+  /* 靠水道的两侧再补一列，绿带才「成列」 */
+  [2, 5].forEach((c, ci) => {
+    const u = c / (colsN - 1);
+    for (let k = 1; k < 7; k++) {
+      const t = Math.pow(k / 7, 1.3);
+      const xNear = w * (-0.05 + u * 0.98);
+      const xFar = vanishX + (xNear - vanishX) * 0.4;
+      const x = xFar + (xNear - xFar) * t - w * 0.012;
+      const y = yFar + (yNear - yFar) * t;
+      const hs = h * (0.008 + t * 0.02);
+      inkStroke(ctx, [[x, y], [x, y - hs]], {
+        color: '#4d5c3d',
+        width: Math.max(0.8, hs * 0.12),
+        alpha: 0.24 + t * 0.14,
+        seed: seed + 520 + ci * 40 + k,
+        wobble: 0.1,
+        dry: 0.1,
+        layers: 1,
+        taper: true,
+        step: 2,
+      });
+    }
+  });
+
+  /* 单孔石桥：一道弧，压在溇港上，是全幅唯一的建筑高光 */
+  bridge(ctx, w * 0.29, h * 0.735, { w: w * 0.066, h: h * 0.036, seed: seed + 600, alpha: 0.5 });
+  bridge(ctx, w * 0.155, h * 0.53, { w: w * 0.05, h: h * 0.024, seed: seed + 607, alpha: 0.3 });
+
+  /* 塘群中央的小村：几间屋，几棵树，不铺开 */
+  houseRow(ctx, {
+    seed: seed + 700,
+    alpha: 0.46,
+    tone: '#f4efe4',
+    toneAlpha: 0.85,
+    list: [
+      [w * 0.232, h * 0.552, 19, 0],
+      [w * 0.272, h * 0.566, 16, 1],
+      [w * 0.208, h * 0.575, 15, 0],
+      [w * 0.252, h * 0.59, 14, 0],
+    ],
+  });
+  treeGroup(ctx, {
+    x: w * 0.19,
+    y: h * 0.556,
+    size: 30,
+    count: 3,
+    spread: 0.6,
+    seed: seed + 717,
+    color: '#37432f',
+    alpha: 0.34,
+    canopyAlpha: 0.1,
+    shape: 'mixed',
+  });
+
+  /* 前景：左下角一株桑树与一段岸，压住画角 */
+  treeShape(ctx, w * 0.032, h * 1.02, {
+    size: 132,
+    seed: seed + 901,
+    color: '#2b3526',
+    alpha: 0.44,
+    canopy: '#3f4d36',
+    canopyAlpha: 0.16,
+    lean: 0.1,
+  });
+  reeds(ctx, w * 0.115, h * 0.965, { size: 34, count: 5, seed: seed + 911, alpha: 0.22, dir: 1 });
+  stone(ctx, w * 0.196, h * 0.99, { w: w * 0.045, h: h * 0.015, seed: seed + 915, alpha: 0.2, moss: 2 });
+  groundWash(ctx, { w, y0: h * 0.96, y1: h * 1.02, color: '#5d6b4b', alpha: 0.14, seed: seed + 919, x0: 0, x1: 0.3 });
+}
+
+/* ══════════════════════════════════════════════════════════
+   十 · 滕头：一条环形水渠围住村子，外面是成行成列的苗木
+   ══════════════════════════════════════════════════════════ */
+
+export function sceneTengtou(ctx, w, h, seed = 10001) {
+  skyWash(ctx, w, h, { color: '#8d948a', alpha: 0.065, from: 0, to: 0.34 });
+
+  /* 远处只有低缓丘陵，压在地平线上，不抢戏 */
+  farRange(ctx, w, h, {
+    baseY: 0.185,
+    amp: 0.028,
+    alpha: 0.12,
+    seed: seed + 11,
+    peaks: [
+      { cx: 0.05, half: 0.16, h: 1, tilt: 0.22, sharp: 1.3 },
+      { cx: 0.24, half: 0.17, h: 0.62, tilt: -0.14, sharp: 1.2 },
+      { cx: 0.42, half: 0.18, h: 0.34, tilt: 0.1, sharp: 1.15 },
+    ],
+    fade: [[0, 0.9], [0.7, 0.4], [1, 0]],
+  });
+  mountain(ctx, w, h, {
+    seed: seed + 21,
+    baseY: h * 0.3,
+    amp: h * 0.055,
+    footY: h * 0.44,
+    tone: '#6f8055',
+    toneAlpha: 0.1,
+    lineColor: '#4a544a',
+    lineAlpha: 0.22,
+    lineWidth: 1.2,
+    texture: 1,
+    peaks: [
+      { cx: 0.075, half: 0.2, h: 1, tilt: 0.14, sharp: 1.18 },
+      { cx: 0.29, half: 0.17, h: 0.5, tilt: -0.14, sharp: 1.12 },
+    ],
+    fade: [[0, 0.85], [0.55, 0.4], [1, 0.02]],
+    footFade: 0.62,
+    veins: 1,
+    moss: 3,
+  });
+  mist(ctx, { x: -w * 0.04, y: h * 0.345, w: w * 0.66, h: h * 0.045, seed: seed + 31, strength: 0.62, blobs: 4 });
+
+  /* 平原底子：一层极淡的田色，从地平线铺到画外 */
+  const fieldTop = softEdge(-w * 0.03, w * 0.99, h * 0.372, h * 0.003, seed + 41, 30);
+  washArea(ctx, fieldTop.concat([[w * 0.99, h * 1.02], [-w * 0.03, h * 1.02]]), {
+    color: '#7c9160',
+    a0: 0.03,
+    a1: 0.13,
+    yTop: h * 0.36,
+    yBot: h,
+  });
+
+  /* 环形水渠：一圈不圆的环，内外两条岸，中间是水 */
+  const cx = w * 0.215;
+  const cy = h * 0.615;
+  const rx = w * 0.205;
+  const ry = h * 0.128;
+  const ring = (scale, sd) => {
+    const r = mulberry32(sd);
+    const pts = [];
+    const seg = 44;
+    const p1 = r() * 6.28;
+    const p2 = r() * 6.28;
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * Math.PI * 2;
+      const k = 1 + Math.sin(a * 3 + p1) * 0.045 + Math.sin(a * 5 + p2) * 0.028;
+      pts.push([cx + Math.cos(a) * rx * scale * k, cy + Math.sin(a) * ry * scale * k * (1 + Math.sin(a * 2 + p1) * 0.05)]);
+    }
+    return pts;
+  };
+  const outer = ring(1, seed + 51);
+  const inner = ring(0.9, seed + 53);
+  washArea(ctx, outer.concat(inner.slice().reverse()), {
+    color: '#6d8f8a',
+    a0: 0.09,
+    a1: 0.2,
+    yTop: cy - ry,
+    yBot: cy + ry,
+  });
+  inkStroke(ctx, outer, {
+    color: '#3a3f38',
+    width: 1.6,
+    alpha: 0.4,
+    seed: seed + 61,
+    wobble: 0.6,
+    dry: 0.22,
+    layers: 2,
+    taper: false,
+    step: 4,
+  });
+  inkStroke(ctx, inner, {
+    color: '#5a625b',
+    width: 1.1,
+    alpha: 0.34,
+    seed: seed + 67,
+    wobble: 0.5,
+    dry: 0.3,
+    layers: 1,
+    taper: false,
+    step: 4,
+  });
+
+  /* 村里的直路：一横一竖，通到环渠的两个口子 */
+  inkStroke(ctx, [[cx, h * 0.492], [cx + w * 0.004, h * 0.742]], {
+    color: '#8d948a',
+    width: 3.4,
+    alpha: 0.3,
+    seed: seed + 81,
+    wobble: 0.3,
+    dry: 0.36,
+    layers: 1,
+    taper: false,
+    step: 6,
+  });
+  inkStroke(ctx, [[w * 0.038, h * 0.596], [w * 0.392, h * 0.586]], {
+    color: '#8d948a',
+    width: 3,
+    alpha: 0.28,
+    seed: seed + 87,
+    wobble: 0.3,
+    dry: 0.4,
+    layers: 1,
+    taper: false,
+    step: 6,
+  });
+  /* 路的两侧压线，路才立起来 */
+  inkStroke(ctx, [[cx - w * 0.006, h * 0.496], [cx - w * 0.002, h * 0.738]], {
+    color: '#3a3f38',
+    width: 0.8,
+    alpha: 0.22,
+    seed: seed + 91,
+    wobble: 0.3,
+    dry: 0.4,
+    layers: 1,
+    taper: false,
+    step: 5,
+  });
+  inkStroke(ctx, [[cx + w * 0.006, h * 0.498], [cx + w * 0.01, h * 0.74]], {
+    color: '#3a3f38',
+    width: 0.8,
+    alpha: 0.22,
+    seed: seed + 93,
+    wobble: 0.3,
+    dry: 0.4,
+    layers: 1,
+    taper: false,
+    step: 5,
+  });
+
+  /* 白墙黑瓦与独栋小楼混排：沿两条路摆，谁也不对齐 */
+  houseRow(ctx, {
+    seed: seed + 500,
+    alpha: 0.5,
+    tone: '#f4efe4',
+    toneAlpha: 0.88,
+    list: [
+      [w * 0.148, h * 0.548, 24, 0],
+      [w * 0.19, h * 0.536, 21, 1],
+      [w * 0.252, h * 0.546, 22, 0],
+      [w * 0.288, h * 0.56, 20, 0],
+      [w * 0.128, h * 0.628, 23, 0],
+      [w * 0.166, h * 0.646, 20, 1],
+      [w * 0.262, h * 0.636, 21, 0],
+      [w * 0.3, h * 0.652, 19, 1],
+      [w * 0.2, h * 0.694, 22, 0],
+      [w * 0.246, h * 0.712, 18, 0],
+    ],
+  });
+
+  /* 小楼：方盒子，两层，平顶。混在瓦房里，一眼能看出新与旧 */
+  const blockHouse = (x, y, s, sd) => {
+    inkStroke(
+      ctx,
+      [[x - s * 0.34, y], [x - s * 0.34, y - s * 0.62], [x + s * 0.36, y - s * 0.6], [x + s * 0.36, y]],
+      { color: '#3a3f38', width: Math.max(1, s * 0.055), alpha: 0.46, seed: sd, wobble: 0.22, dry: 0.1, layers: 2, taper: false, step: 3 }
+    );
+    inkStroke(ctx, [[x - s * 0.4, y - s * 0.62], [x + s * 0.42, y - s * 0.6]], {
+      color: '#2b2f2b',
+      width: Math.max(1, s * 0.06),
+      alpha: 0.42,
+      seed: sd + 2,
+      wobble: 0.2,
+      dry: 0.12,
+      layers: 1,
+      taper: false,
+      step: 3,
+    });
+    inkStroke(ctx, [[x - s * 0.34, y - s * 0.34], [x + s * 0.36, y - s * 0.33]], {
+      color: '#5a625b',
+      width: 0.8,
+      alpha: 0.3,
+      seed: sd + 4,
+      wobble: 0.2,
+      dry: 0.2,
+      layers: 1,
+      taper: false,
+      step: 3,
+    });
+    for (let k = 0; k < 2; k++) {
+      inkStroke(ctx, [[x - s * 0.2 + k * s * 0.28, y - s * 0.28], [x - s * 0.2 + k * s * 0.28, y - s * 0.16]], {
+        color: '#3a3f38',
+        width: Math.max(1, s * 0.05),
+        alpha: 0.3,
+        seed: sd + 10 + k,
+        wobble: 0.1,
+        dry: 0,
+        layers: 1,
+        taper: false,
+        step: 2,
+      });
+    }
+  };
+  blockHouse(w * 0.222, h * 0.6, 26, seed + 540);
+  blockHouse(w * 0.176, h * 0.588, 22, seed + 545);
+  blockHouse(w * 0.278, h * 0.6, 20, seed + 549);
+
+  /* 村里的绿化：沿路、沿渠，密得很，但不排成线 */
+  treeGroup(ctx, { x: w * 0.108, y: h * 0.575, size: 38, count: 3, spread: 0.6, seed: seed + 601, color: '#2f3a29', alpha: 0.36, canopyAlpha: 0.12, shape: 'mixed' });
+  treeGroup(ctx, { x: w * 0.318, y: h * 0.585, size: 34, count: 3, spread: 0.55, seed: seed + 611, color: '#37432f', alpha: 0.3, canopyAlpha: 0.1 });
+  treeGroup(ctx, { x: w * 0.214, y: h * 0.735, size: 30, count: 3, spread: 0.6, seed: seed + 617, color: '#37432f', alpha: 0.26, canopyAlpha: 0.09 });
+  treeGroup(ctx, { x: w * 0.086, y: h * 0.66, size: 32, count: 2, spread: 0.5, seed: seed + 621, color: '#3f4a38', alpha: 0.26, canopyAlpha: 0.09 });
+  treeGroup(ctx, { x: w * 0.352, y: h * 0.66, size: 28, count: 2, spread: 0.45, seed: seed + 625, color: '#4a544a', alpha: 0.2, canopyAlpha: 0.07 });
+
+  /* 环外的苗木基地：成行成列的平行细线，一行一行往远处收 */
+  const nursery = (x0, x1, yTop, yBot, rows, sd, alpha) => {
+    const r = mulberry32(sd);
+    for (let i = 0; i < rows; i++) {
+      const t = i / (rows - 1);
+      const y = yTop + (yBot - yTop) * Math.pow(t, 1.1);
+      const shrink = 0.45 + t * 0.6;
+      const lx = x0 + (1 - shrink) * (x1 - x0) * 0.5;
+      const rx = x1 - (1 - shrink) * (x1 - x0) * 0.5;
+      inkStroke(ctx, softEdge(lx, rx, y, h * 0.0016, sd + i * 7, 18), {
+        color: '#5a625b',
+        width: 0.7 + t * 0.6,
+        alpha: alpha * (0.5 + t * 0.6),
+        seed: sd + 10 + i * 5,
+        wobble: 0.35,
+        dry: 0.34,
+        layers: 1,
+        taper: false,
+        step: 4,
+      });
+      // 苗木：一排小竖笔，间距均匀，这是人工的秩序
+      const n = 12 + Math.round(t * 8);
+      for (let k = 0; k < n; k++) {
+        const u = (k + 0.5) / n;
+        const x = lx + (rx - lx) * u + (r() - 0.5) * 1.2;
+        const hs = h * (0.006 + t * 0.012);
+        inkStroke(ctx, [[x, y], [x, y - hs]], {
+          color: '#4d5c3d',
+          width: Math.max(0.7, hs * 0.18),
+          alpha: alpha * (0.8 + t * 0.5),
+          seed: sd + 60 + i * 31 + k,
+          wobble: 0.08,
+          dry: 0,
+          layers: 1,
+          taper: true,
+          step: 2,
+        });
+      }
+    }
+  };
+  nursery(w * 0.4, w * 0.62, h * 0.45, h * 0.56, 5, seed + 700, 0.24);
+  nursery(w * 0.02, w * 0.2, h * 0.412, h * 0.472, 4, seed + 740, 0.22);
+  nursery(w * 0.05, w * 0.34, h * 0.79, h * 0.95, 6, seed + 780, 0.26);
+
+  /* 更远的农田：几道横垄，横着划过去 */
+  for (let i = 0; i < 5; i++) {
+    const y = h * (0.4 + i * 0.014);
+    inkStroke(ctx, softEdge(-w * 0.02, w * 0.56, y, h * 0.0014, seed + 820 + i, 20), {
+      color: '#7c9160',
+      width: 0.8,
+      alpha: 0.18,
+      seed: seed + 830 + i,
+      wobble: 0.4,
+      dry: 0.4,
+      layers: 1,
+      taper: false,
+      step: 4,
+    });
+  }
+
+  /* 前景：左下角一株树，压住整个画面 */
+  treeShape(ctx, w * 0.026, h * 1.04, {
+    size: 168,
+    seed: seed + 901,
+    color: '#1f271c',
+    alpha: 0.46,
+    canopy: '#333f2c',
+    canopyAlpha: 0.18,
+    lean: 0.14,
+  });
+  treeGroup(ctx, { x: w * 0.12, y: h * 1.0, size: 44, count: 3, spread: 0.55, seed: seed + 921, color: '#37432f', alpha: 0.28, canopyAlpha: 0.1, shape: 'mixed' });
+  groundWash(ctx, { w, y0: h * 0.955, y1: h * 1.02, color: '#5d6b4b', alpha: 0.16, seed: seed + 931, x0: 0, x1: 0.38 });
+}
+
+/* ══════════════════════════════════════════════════════════
    场景注册表
    ══════════════════════════════════════════════════════════ */
 
@@ -1439,6 +2561,10 @@ export const SCENES = {
   yunhe: sceneYunhe,
   pujiang: scenePujiang,
   xinxinqiao: sceneXinxinqiao,
+  xixi: sceneXixi,
+  dachendao: sceneDachendao,
+  sangji: sceneSangji,
+  tengtou: sceneTengtou,
 };
 
 /** 渲染到 canvas（等比、不拉伸） */

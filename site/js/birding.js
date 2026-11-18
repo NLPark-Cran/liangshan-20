@@ -403,7 +403,7 @@ function drawHabitat(canvas, kind) {
   ctx.fillStyle = '#f4efe4';
   ctx.fillRect(0, 0, w, h);
 
-  // 生境图统一在虚拟画布里画，比例与六站一致
+  // 生境图统一在虚拟画布里画，比例与长卷一致
   const seed = [...kind].reduce((a, c) => a + c.charCodeAt(0), 0) * 7 + 31;
   inVirtualBand(ctx, w, h, kind, seed);
 }

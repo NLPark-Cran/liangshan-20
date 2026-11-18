@@ -1,55 +1,59 @@
 /**
- * atlas3d.js — 3D 点位探索
+ * atlas3d.js — 3D 展台
  *
- * 六个村点各有一件 Lux3D 生成的微缩地形模型。这一页把它们放在同一张
- * 长长的展台上，可以横向拖动、逐个细看；点开一个会推到近景，右侧出资料。
+ * 一件展品一个圆形台座，沿一条直线摆开。镜头横向平移，走到谁面前就停谁。
+ * 标题压在左上，资料是左下浮层卡，底部是胶片条索引，画面主体始终是模型本身。
  *
- * 设计取舍：
- * - 模型走 meshopt 压缩 + WebP 纹理，单件 1MB 上下，串行加载，先给近处的
- * - 不用 OrbitControls：这里的动作是「沿着一排出戏台往前挪」，
- *   自由轨道会让视角失序。自定义一个带阻尼的轨道，限制俯仰与距离
- * - 所有模型归一化到同一包围盒高度，保证六个点的视觉尺度可比
+ * 三个取舍：
+ * - 不用 OrbitControls。这里的动作是「沿展台走过去」，自由轨道会让视角失序。
+ *   自己写一个带阻尼的轨道，俯仰和距离都有限制。
+ * - 所有模型归一化到同一包围盒，各处才有可比的视觉尺度。
+ * - 材质一律保持资产原样。之前统一抬 roughness 把水面抹成哑光白，是错的。
  */
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from '../vendor/three/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from '../vendor/three/libs/meshopt_decoder.module.js';
-// 六站文案与数据只有一份来源，长卷和 3D 展台共用，避免两处说法不一致。
+// 文案与数据只有 points.js 一份来源，长卷和这里共用。
 import SITE_POINTS from './points.js';
 
-/* ────────────────────────── 数据 ────────────────────────── */
+/* ────────────────────────── 展台编排 ────────────────────────── */
 
-const POINTS = [
-  { id: 'yucun', name: '余村', region: '湖州安吉', tag: '两山理念诞生地', year: '2005', yaw: -0.22 },
-  { id: 'xiajiang', name: '下姜村', region: '杭州淳安', tag: '从穷山村到绿富美', year: '2003', yaw: -0.10 },
-  // 钱江源的侧壁上有一块资产自带的厂牌，正面朝向避开它会把整片岩壁转到镜头前，
-  // 反而压掉了溪谷本身。这里保留最佳观赏面，厂牌落到画面外的侧后方。
-  { id: 'qianjiangyuan', name: '钱江源', region: '衢州开化', tag: '国家公园体制试点', year: '2016', yaw: -0.34 },
-  { id: 'yunhe', name: '云和梯田', region: '丽水云和', tag: '全球重要农业文化遗产', year: '2022', yaw: -0.22 },
-  { id: 'pujiang', name: '浦江', region: '金华浦江', tag: '五水共治起点', year: '2013', yaw: -0.10 },
-  { id: 'xinxinqiao', name: '新溪桥', region: '嘉兴', tag: '平原水乡的数字化', year: '2024', yaw: Math.PI - 0.22 },
+/**
+ * 上台的点位与每件的朝向。名称、地区、文案、数据、引语一律取自 points.js。
+ * 这里只决定「谁上台、朝哪边」；增删点位时改这一个表，别处不用动。
+ * 有模型文件但没写进这张表的点位不会出现，反之也不会。
+ */
+const STAGE = [
+  { id: 'yucun', yaw: -0.22 },
+  { id: 'xiajiang', yaw: -0.10 },
+  { id: 'xinxinqiao', yaw: Math.PI - 0.22 },
+  { id: 'pujiang', yaw: -0.10 },
+  { id: 'qianjiangyuan', yaw: -0.34 },
+  { id: 'xixi', yaw: -0.18 },
+  { id: 'yunhe', yaw: -0.22 },
+  { id: 'sangji', yaw: -0.16 },
+  { id: 'tengtou', yaw: -0.20 },
+  { id: 'dachendao', yaw: 0.12 },
 ];
 
-// 展台只负责模型与呈现；文案与数据一律取自 points.js 的那一份。
-const CONTENT = new Map(SITE_POINTS.map((p) => [p.id, p]));
-for (const p of POINTS) {
-  const c = CONTENT.get(p.id);
-  if (!c) continue;
-  p.tag = c.tag || p.tag;
-  p.lead = c.lead || '';
-  p.data = c.data || [];
-  p.quote = c.quote || null;
-  p.chapter = c.chapter || '';
-}
+const POINTS = STAGE.map((s) => {
+  const c = SITE_POINTS.find((p) => p.id === s.id);
+  return { ...(c || { name: s.id, region: '', tag: '', lead: '', data: [] }), ...s };
+});
 
 /* ────────────────────────── 场景 ────────────────────────── */
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
-const rail = document.getElementById('rail');
+const film = document.getElementById('film');
+const mark = document.getElementById('mark');
+const card = document.getElementById('card');
+const cardBody = document.getElementById('card-body');
+const hint = document.getElementById('hint');
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -57,20 +61,20 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#f2ece0');
-scene.fog = new THREE.Fog('#f2ece0', 14, 34);
+// canvas 透明，纸色底由 body 的渐变给，和整站同一个底
+scene.fog = new THREE.Fog('#f4efe4', 15, 40);
 
-// 环境贴图：水面和陶土都要有东西可反射，否则 PBR 材质只剩漫反射，看着发白。
-// RoomEnvironment 是纯程序生成的室内光板，不额外下载资源。
+// 环境贴图：水面要能反射，否则 PBR 只剩漫反射，看着发白。
+// RoomEnvironment 是程序生成的光板，不额外下载资源。
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.42;
+scene.environmentIntensity = 0.45;
 pmrem.dispose();
 
-const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 200);
 
 /* 光：一盏主光带阴影，一盏背部轮廓光，半球光压住暗部 */
-const key = new THREE.DirectionalLight('#fff7ea', 2.5);
+const key = new THREE.DirectionalLight('#fff8ec', 2.6);
 key.position.set(6, 12, 8);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
@@ -82,44 +86,39 @@ key.shadow.camera.top = 16;
 key.shadow.camera.bottom = -16;
 key.shadow.bias = -0.0005;
 key.shadow.normalBias = 0.02;
-// 场景是静止的，阴影只需要算一次。模型自转时再按需打开，
-// 否则每帧都要重画 430k 面的深度图，软件渲染下直接掉到个位数帧。
+// 场景基本静止，阴影按需重算。每帧重画几十万面的深度图，软件渲染下直接掉到个位数帧。
 key.shadow.autoUpdate = false;
 key.shadow.needsUpdate = true;
 scene.add(key);
 
-const rim = new THREE.DirectionalLight('#c9dde6', 0.9);
+const rim = new THREE.DirectionalLight('#cfdfe6', 1.0);
 rim.position.set(-8, 5, -10);
 scene.add(rim);
+scene.add(new THREE.HemisphereLight('#e6eef0', '#c8b79a', 1.0));
+scene.add(new THREE.AmbientLight('#ffffff', 0.18));
 
-scene.add(new THREE.HemisphereLight('#e2ebee', '#c2b096', 0.95));
-scene.add(new THREE.AmbientLight('#ffffff', 0.2));
-
-/* 每个点位一个单独的圆形展台，比一整条长桌更像陈列，也给每件作品留出呼吸 */
-const SPACING = 4.6;
-const pads = [];
+/* 台座 */
+const SPACING = 5.6;
 for (let i = 0; i < POINTS.length; i++) {
   const pad = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.72, 1.78, 0.16, 72),
-    new THREE.MeshStandardMaterial({ color: '#e6dcc8', roughness: 0.94, metalness: 0 }),
+    new THREE.CylinderGeometry(1.74, 1.8, 0.16, 72),
+    new THREE.MeshStandardMaterial({ color: '#e9dfca', roughness: 0.95, metalness: 0 }),
   );
-  pad.position.set(i * SPACING, -0.08, 0);
+  pad.position.set(i * SPACING, -0.09, 0);
   pad.receiveShadow = true;
   pad.castShadow = true;
   scene.add(pad);
-  pads.push(pad);
 
-  // 台面下方一圈很淡的落影，让展台不像是浮着
   const halo = new THREE.Mesh(
-    new THREE.CircleGeometry(2.15, 64),
-    new THREE.MeshBasicMaterial({ color: '#d9cdb6', transparent: true, opacity: 0.3 }),
+    new THREE.CircleGeometry(2.2, 64),
+    new THREE.MeshBasicMaterial({ color: '#ddd0b6', transparent: true, opacity: 0.28 }),
   );
   halo.rotation.x = -Math.PI / 2;
-  halo.position.set(i * SPACING, -0.161, 0);
+  halo.position.set(i * SPACING, -0.17, 0);
   scene.add(halo);
 }
 
-/* ────────────────────────── 加载 ────────────────────────── */
+/* ────────────────────────── 载入 ────────────────────────── */
 
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
@@ -133,20 +132,15 @@ function normalize(root, target = 2.5) {
   const maxDim = Math.max(size.x, size.z) || 1;
   const s = target / maxDim;
   root.scale.setScalar(s);
-  // 轻微下沉：资产自带的厂牌水印烘在侧壁最下沿，沉进托盘刚好遮住，
-  // 也让摆件看着是嵌在台面上，而不是浮在上头。
-  const sink = size.y * s * 0.075;
-  root.position.set(-center.x * s, -box.min.y * s - sink, -center.z * s);
+  root.position.set(-center.x * s, -box.min.y * s, -center.z * s);
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
     o.receiveShadow = true;
-    // 材质保持资产原样：梯田水面的反光靠低 roughness，
-    // 之前统一抬到 0.62 以上会把水面抹成哑光白，梯田就糊了。
     const m = o.material;
     if (m) m.envMapIntensity = 0.8;
   });
-  return { size, tris: countTris(root) };
+  return { tris: countTris(root) };
 }
 
 function countTris(root) {
@@ -160,28 +154,25 @@ function countTris(root) {
   return Math.round(t);
 }
 
-let totalTris = 0;
 let loadedCount = 0;
 
 function loadOne(i) {
   const p = POINTS[i];
-  const t0 = performance.now();
   return new Promise((resolve) => {
     loader.load(
       `assets/models/${p.id}.min.glb`,
       (gltf) => {
         const holder = new THREE.Group();
-        const info = normalize(gltf.scene);
         holder.add(gltf.scene);
+        const info = normalize(gltf.scene);
         holder.position.set(i * SPACING, 0, 0);
         holder.rotation.y = p.yaw ?? -0.22;
         scene.add(holder);
 
-        slots[i] = { group: holder, ready: true, tris: info.tris, ms: Math.round(performance.now() - t0) };
-        totalTris += info.tris;
+        slots[i] = { group: holder, ready: true, tris: info.tris };
         loadedCount++;
         updateHud();
-        updateRail();
+        updateFilm();
         resolve(true);
       },
       undefined,
@@ -190,122 +181,147 @@ function loadOne(i) {
         slots[i] = { group: null, ready: false, failed: true };
         loadedCount++;
         updateHud();
-        updateRail();
+        updateFilm();
         resolve(false);
       },
     );
   });
 }
 
-/**
- * 六件并行加载，每件到位就画。串行会让第 6 件等前 5 件全部结束，
- * 首屏要空等十几秒；并行时第一件 300ms 就能看见。
- * 浏览器对同域并发有上限，这里只有 6 个请求，不会互相挤占。
- */
 async function loadAll() {
   await Promise.all(POINTS.map((_, i) => loadOne(i)));
 }
 
-/* ────────────────────────── HUD 与推进条 ────────────────────────── */
+/* ────────────────────────── 状态显示 ────────────────────────── */
 
 function updateHud() {
   const ok = slots.filter((s) => s.ready).length;
   const pct = Math.round((ok / POINTS.length) * 100);
-  hud.innerHTML = `<span class="hud__bar"><i style="width:${pct}%"></i></span>`
-    + `<b>${ok}/${POINTS.length}</b> 件就位 · <b>${(totalTris / 1000).toFixed(0)}k</b> 面`;
+  hud.innerHTML =
+    `<span class="hud__bar"><i style="width:${pct}%"></i></span>` +
+    `<span><b>${String(active + 1).padStart(2, '0')}</b> / ${POINTS.length}</span>`;
 }
 
-function updateRail() {
-  rail.innerHTML = POINTS.map((p, i) => {
+function updateFilm() {
+  film.innerHTML = POINTS.map((p, i) => {
     const s = slots[i];
-    const dot = s?.ready ? '●' : s?.failed ? '×' : '○';
-    return `<button class="rail__item${i === active ? ' is-on' : ''}" data-i="${i}">
-      <span class="rail__dot">${dot}</span>
-      <span class="rail__name">${p.name}</span>
-      <span class="rail__region">${p.region}</span>
+    const state = s?.ready ? 'ready' : s?.failed ? 'failed' : 'loading';
+    return `<button class="film__item${i === active ? ' is-on' : ''}" data-i="${i}" data-state="${state}"
+      aria-current="${i === active ? 'true' : 'false'}">
+      <span class="film__name">${p.name}</span>
+      <span class="film__region">${p.region}</span>
     </button>`;
   }).join('');
-  rail.querySelectorAll('.rail__item').forEach((el) => {
+  film.querySelectorAll('.film__item').forEach((el) => {
     el.addEventListener('click', () => focus(Number(el.dataset.i)));
   });
+  const on = film.querySelector('.film__item.is-on');
+  if (on && film.scrollWidth > film.clientWidth) {
+    on.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }
 }
 
 /* ────────────────────────── 相机 ────────────────────────── */
 
 let active = 0;
 const cam = {
-  x: 0, // 目标横向位置（世界坐标）
-  dist: 9.6,
-  pitch: 0.72, // 俯仰，弧度
-  yaw: 0,
+  x: 0,
+  dist: 8.9,
+  pitch: 0.54,
   // 平滑量
-  cx: 0, cdist: 9.6, cpitch: 0.72, cyaw: 0,
+  cx: 0,
+  cdist: 11.6,
+  cpitch: 0.54,
 };
 
 function focus(i) {
-  active = i;
-  cam.x = i * SPACING;
-  cam.dist = 6.6;
-  // 俯视角：地形摆件要看得见上面那层山水，
-  // 侧壁既不承载内容，也避开了资产自带的厂牌水印。
-  cam.pitch = 0.72;
-  showInfo(i);
-  updateRail();
+  active = Math.max(0, Math.min(POINTS.length - 1, i));
+  cam.x = active * SPACING;
+  cam.dist = 8.9;
+  cam.pitch = 0.54;
+  showMark();
+  showCard();
+  updateHud();
+  updateFilm();
+  hideHint();
 }
 
-function showInfo(i) {
-  const p = POINTS[i];
-  const s = slots[i] || {};
-  const panel = document.getElementById('info');
+function showMark() {
+  const p = POINTS[active];
+  mark.querySelector('.mark__region').textContent = p.region || '';
+  mark.querySelector('.mark__name').textContent = p.name;
+  mark.querySelector('.mark__tag').textContent = p.tag || '';
+  mark.classList.remove('is-swap');
+  void mark.offsetWidth; // 重启动画
+  mark.classList.add('is-swap');
+}
 
-  const data = (p.data || []).slice(0, 4);
-  const rows = data.length
-    ? `<dl class="info__data">${data
-        .map(
-          (d) => `
-          <div class="info__row">
-            <dt>${d.k}</dt>
-            <dd><b>${d.v}</b>${d.note ? `<span>${d.note}</span>` : ''}${
-              d.source ? `<i>${d.source}</i>` : ''
-            }</dd>
-          </div>`,
-        )
-        .join('')}</dl>`
-    : '';
+function showCard() {
+  const p = POINTS[active];
+
+  const rows = (p.data || [])
+    .slice(0, 4)
+    .map(
+      (d) => `<div class="row">
+        <dt>${d.k}</dt>
+        <dd><b>${d.v}</b>${d.note ? `<span>${d.note}</span>` : ''}${
+          d.source ? `<i>${d.source}</i>` : ''
+        }</dd>
+      </div>`,
+    )
+    .join('');
 
   const quote = p.quote?.text
-    ? `<blockquote class="info__quote">
+    ? `<blockquote class="quote">
          <p>${p.quote.text}</p>
          ${p.quote.cite ? `<cite>${p.quote.cite}</cite>` : ''}
        </blockquote>`
     : '';
 
-  panel.innerHTML = `
-    <div class="info__kicker">${p.region} · ${p.chapter || ''}</div>
-    <h2 class="info__title">${p.name}</h2>
-    <p class="info__lead">${p.lead || p.tag}</p>
-    ${rows}
+  // 本组自撰的札记，与领导人引语分开呈现，不混成引语
+  const note = p.note?.text
+    ? `<div class="note">
+         <p>${p.note.text}</p>
+         ${p.note.cite ? `<cite>${p.note.cite}</cite>` : ''}
+       </div>`
+    : '';
+
+  cardBody.innerHTML = `
+    <p class="card__lead">${p.lead || ''}</p>
+    ${rows ? `<dl class="rows">${rows}</dl>` : ''}
     ${quote}
-    <p class="info__foot">
-      地形模型 Lux3D 生成 · ${s.ready ? s.tris.toLocaleString() + ' 面' : '未就位'}
-    </p>
+    ${note}
   `;
-  panel.classList.add('is-on');
+  cardBody.scrollTop = 0;
 }
 
-/* 拖拽：横向移动沿展台平移，纵向改变俯仰 */
+const cardToggle = document.getElementById('card-toggle');
+function setCard(open) {
+  card.dataset.open = String(open);
+  cardToggle.setAttribute('aria-expanded', String(open));
+}
+cardToggle.addEventListener('click', () => setCard(card.dataset.open !== 'true'));
+
+function hideHint() {
+  if (hint && !hint.classList.contains('is-off')) hint.classList.add('is-off');
+}
+
+/* ────────────────────────── 交互 ────────────────────────── */
+
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
 let moved = 0;
+let startX = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
   dragging = true;
   moved = 0;
-  lastX = e.clientX;
+  lastX = startX = e.clientX;
   lastY = e.clientY;
   canvas.setPointerCapture(e.pointerId);
 });
+
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const dx = e.clientX - lastX;
@@ -313,34 +329,51 @@ canvas.addEventListener('pointermove', (e) => {
   lastX = e.clientX;
   lastY = e.clientY;
   moved += Math.abs(dx) + Math.abs(dy);
-  cam.x -= dx * 0.012;
-  cam.pitch = Math.min(1.05, Math.max(0.08, cam.pitch + dy * 0.004));
+  cam.x -= dx * 0.011;
+  cam.pitch = Math.min(1.02, Math.max(0.1, cam.pitch + dy * 0.0038));
+  if (moved > 8) hideHint();
 });
+
 canvas.addEventListener('pointerup', (e) => {
   dragging = false;
   canvas.releasePointerCapture?.(e.pointerId);
+  // 甩得够远就顺势翻到下一件，像翻书
+  const fling = e.clientX - startX;
+  if (Math.abs(fling) > 90) focus(active + (fling < 0 ? 1 : -1));
+  else snapToNearest();
 });
+
 canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
-    cam.dist = Math.min(16, Math.max(3.6, cam.dist + e.deltaY * 0.006));
+    cam.dist = Math.min(15, Math.max(3.8, cam.dist + e.deltaY * 0.0055));
+    hideHint();
   },
   { passive: false },
 );
 
-/* 键盘也能走：左右切点位 */
+/** 松手后回到最近的展台，不允许停在两件之间 */
+function snapToNearest() {
+  const near = Math.round(cam.x / SPACING);
+  if (near !== active) focus(near);
+  else cam.x = active * SPACING;
+}
+
 addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowRight') focus(Math.min(POINTS.length - 1, active + 1));
-  if (e.key === 'ArrowLeft') focus(Math.max(0, active - 1));
+  if (e.key === 'ArrowRight') { e.preventDefault(); focus(active + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); focus(active - 1); }
+  if (e.key === 'Home') { e.preventDefault(); focus(0); }
+  if (e.key === 'End') { e.preventDefault(); focus(POINTS.length - 1); }
 });
 
-/* ────────────────────────── 渲染循环 ────────────────────────── */
+/* ────────────────────────── 渲染 ────────────────────────── */
 
 function resize() {
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
-  if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())) {
+  const pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.round(w * pr) || canvas.height !== Math.round(h * pr)) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -353,38 +386,49 @@ let fpsT = performance.now();
 let fps = 0;
 let frameNo = 0;
 
+/** 宽屏时把当前这件推到画面右半边，左手边留给标题和资料卡 */
+function screenShift() {
+  return camera.aspect < 1.05 ? 0 : 0.72;
+}
+
+/** 窄屏下方要留出资料抽屉的位置，模型整体上移一点 */
+function liftY() {
+  return camera.aspect < 1.05 ? 0.5 : 0;
+}
+
 function tick() {
   requestAnimationFrame(tick);
   resize();
 
-  // 阻尼趋近，位移越大追得越快，避免长距离拖拽后拖尾
   const k = (a, b, t) => a + (b - a) * t;
-  cam.cx = k(cam.cx, cam.x, 0.09);
-  cam.cdist = k(cam.cdist, cam.dist, 0.09);
-  cam.cpitch = k(cam.cpitch, cam.pitch, 0.1);
+  cam.cx = k(cam.cx, cam.x, 0.085);
+  cam.cdist = k(cam.cdist, cam.dist, 0.085);
+  cam.cpitch = k(cam.cpitch, cam.pitch, 0.095);
 
   const t = clock.getElapsedTime();
-  const bob = Math.sin(t * 0.5) * 0.04;
+  const bob = Math.sin(t * 0.45) * 0.035;
 
-  // 视口窄时自动退远，避免只看得到一件作品的半边
-  const aspectPull = Math.max(0, (1.5 - camera.aspect)) * 3.4;
-  const dist = cam.cdist + aspectPull;
+  // 视口窄时自动退远，避免只看得到半件。
+  // 系数别太大：推太远会把模型压小、上下都留空。
+  const pull = Math.max(0, 1.5 - camera.aspect) * 2.1;
+  const dist = cam.cdist + pull;
 
+  const shift = screenShift();
   camera.position.set(
-    cam.cx,
+    cam.cx - shift,
     Math.sin(cam.cpitch) * dist + bob,
     Math.cos(cam.cpitch) * dist,
   );
-  camera.lookAt(cam.cx, 0.35, 0);
-
-  // 静止时整体不转，只有被点开的点位轻轻自转，减少无效重绘
+  // 注视点略低于模型中心，让台座落在画面下半部，上方留出天空；
+  // 窄屏把注视点再压低，模型整体上移，给底部抽屉让位
+  camera.lookAt(cam.cx + shift * 0.1, -0.18 - liftY(), 0);
+  // 只有当前这件轻轻自转
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
     if (!s?.group) continue;
-    if (i === active) s.group.rotation.y += 0.0016;
+    if (i === active) s.group.rotation.y += 0.0015;
   }
-  // 被点开的模型在转，阴影每 8 帧补一次就够，肉眼看不出来
-  if (++frameNo % 8 === 0) key.shadow.needsUpdate = true;
+  if (++frameNo % 10 === 0) key.shadow.needsUpdate = true;
 
   renderer.render(scene, camera);
 
@@ -400,8 +444,10 @@ function tick() {
 
 /* ────────────────────────── 启动 ────────────────────────── */
 
+// 窄屏默认把卡片收起，先让出画面
+setCard(window.innerWidth > 860);
 updateHud();
-updateRail();
+updateFilm();
 focus(0);
 addEventListener('resize', resize);
 resize();
@@ -410,14 +456,12 @@ tick();
 window.__atlas = {
   get ready() { return loadedCount; },
   get total() { return POINTS.length; },
-  get tris() { return totalTris; },
+  get tris() { return slots.reduce((a, s) => a + (s.tris || 0), 0); },
   get fps() { return fps; },
   focus,
 };
 
-if (document.getElementById('boot')) {
-  setTimeout(() => document.getElementById('boot')?.classList.add('is-done'), 260);
-}
+setTimeout(() => document.getElementById('boot')?.classList.add('is-done'), 260);
 
 loadAll().then(() => {
   updateHud();
