@@ -133,11 +133,32 @@ export function drawTernPanorama(canvas, s = {}) {
   // ── 海
   const seaY = H * 0.62;
   const sea = ctx.createLinearGradient(0, seaY, 0, H);
-  sea.addColorStop(0, hexA('#6d8f8a', 0.26));
-  sea.addColorStop(0.55, hexA('#6d8f8a', 0.15));
-  sea.addColorStop(1, hexA('#6d8f8a', 0.05));
+  sea.addColorStop(0, hexA('#7a9c96', 0.34));
+  sea.addColorStop(0.35, hexA('#7a9c96', 0.22));
+  sea.addColorStop(1, hexA('#8aa9a2', 0.1));
   ctx.fillStyle = sea;
   ctx.fillRect(0, seaY, W, H - seaY);
+
+  // 岛在水里的倒影：只保留贴近水面的一条，压得很淡，
+  // 整块镜像会把水面变成一块灰影，反而看不出是水。
+  if (island) {
+    const sh0 = islandShape(island, W, H);
+    ctx.save();
+    ctx.beginPath();
+    // 只取水下很窄的一段
+    ctx.rect(0, seaY, W, Math.min(H * 0.13, H - seaY));
+    ctx.clip();
+    ctx.globalAlpha = 0.06;
+    ctx.translate(0, seaY * 2);
+    ctx.scale(1, -1);
+    ctx.beginPath();
+    ctx.moveTo(sh0.pts[0][0], sh0.pts[0][1]);
+    for (let i = 1; i < sh0.pts.length; i++) ctx.lineTo(sh0.pts[i][0], sh0.pts[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = '#5a625b';
+    ctx.fill();
+    ctx.restore();
+  }
 
   // 海平线
   inkStroke(ctx, [[0, seaY], [W, seaY]], {
@@ -180,47 +201,78 @@ export function drawTernPanorama(canvas, s = {}) {
   if (island) {
     const sh = islandShape(island, W, H);
 
-    // 岛体填色
+    // 岛体填色：顶面受光偏亮，往下渐暗，别整块一个灰度
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(sh.pts[0][0], sh.pts[0][1]);
     for (let i = 1; i < sh.pts.length; i++) ctx.lineTo(sh.pts[i][0], sh.pts[i][1]);
     ctx.closePath();
-    const g = ctx.createLinearGradient(0, H * 0.28, 0, sh.seaY);
-    g.addColorStop(0, hexA(island === 'reef' ? '#8d948a' : '#b1813f', 0.2));
-    g.addColorStop(1, hexA(island === 'reef' ? '#8d948a' : '#b1813f', 0.1));
+    const g = ctx.createLinearGradient(0, H * 0.34, 0, sh.seaY);
+    if (island === 'reef') {
+      g.addColorStop(0, hexA('#a8ab9c', 0.34));
+      g.addColorStop(0.4, hexA('#93998b', 0.2));
+      g.addColorStop(1, hexA('#7a8073', 0.1));
+    } else {
+      g.addColorStop(0, hexA('#c8ab74', 0.34));
+      g.addColorStop(0.5, hexA('#b99a63', 0.22));
+      g.addColorStop(1, hexA('#a68a58', 0.1));
+    }
     ctx.fillStyle = g;
     ctx.fill();
     ctx.restore();
 
-    inkStroke(ctx, sh.pts, {
-      color: '#3a3f38',
-      width: 2,
-      alpha: 0.58,
-      seed: 4411,
-      dry: 0.14,
-      layers: 2,
+    /* 轮廓：分三段画，整条一次画完会被飞白打断，看着像断成两截。
+       顶面最实，两侧肩线稍淡，水面以下不描。 */
+    const cutL = sh.pts.findIndex((p) => p[1] < H * 0.42);
+    const cutR = sh.pts.length - 1 - [...sh.pts].reverse().findIndex((p) => p[1] < H * 0.42);
+
+    // 左肩：从水面上来到顶面起点
+    if (cutL > 1) {
+      inkStroke(ctx, sh.pts.slice(0, cutL + 1), {
+        color: '#4a5048', width: 1.6, alpha: 0.44, seed: 4412,
+        dry: 0.1, layers: 1, taper: false, step: 5,
+      });
+    }
+    // 顶面：最实的一段
+    inkStroke(ctx, sh.pts.slice(cutL, cutR + 1), {
+      color: '#3a3f38', width: 1.9, alpha: 0.62, seed: 4411,
+      dry: 0.06, layers: 1, taper: false, step: 5,
     });
+    // 右肩
+    if (cutR < sh.pts.length - 1) {
+      inkStroke(ctx, sh.pts.slice(cutR), {
+        color: '#4a5048', width: 1.6, alpha: 0.44, seed: 4413,
+        dry: 0.1, layers: 1, taper: false, step: 5,
+      });
+    }
 
     // 岩层线
     if (island === 'reef') {
-      for (let i = 0; i < 6; i++) {
-        const y = H * (0.36 + i * 0.042);
-        const halfW = W * (0.1 + i * 0.016);
+      /* 岩纹：不能等长等距地横排，那样像横格纸。
+         长短不一、起止错开，颜色更淡，才像石头的层理。 */
+      const rr = mulberry32(4431);
+      for (let i = 0; i < 9; i++) {
+        const y = H * (0.385 + i * 0.028);
+        // 越往下越宽，跟着岛形走
+        const grow = 0.1 + i * 0.013;
+        const halfW = W * grow;
+        // 起点和终点各自随机偏移，长短就不齐
+        const off = (rr() - 0.5) * W * 0.06;
+        const shrink = 0.55 + rr() * 0.5;
         inkStroke(
           ctx,
           [
-            [W * 0.44 - halfW, y],
-            [W * 0.44, y + (i % 2 ? 1.6 : -1.6)],
-            [W * 0.44 + halfW * 0.92, y + 1],
+            [W * 0.46 - halfW + off, y],
+            [W * 0.46 + off * 0.4, y + (rr() - 0.5) * 2.2],
+            [W * 0.46 + halfW * shrink + off * 0.3, y + (rr() - 0.5) * 1.6],
           ],
           {
-            color: '#5a625b',
-            width: 0.9,
-            alpha: 0.22,
+            color: '#6a7064',
+            width: 0.85,
+            alpha: 0.12 + rr() * 0.06,
             seed: 4413 + i * 7,
-            wobble: 0.5,
-            dry: 0.3,
+            wobble: 0.7,
+            dry: 0.42,
             layers: 1,
             taper: false,
           }
@@ -228,13 +280,21 @@ export function drawTernPanorama(canvas, s = {}) {
       }
     }
 
-    // ── 假鸟：站在岛顶，数量对应档位
+    /* 鸟要站在岛面上，不是全挤在一条线上。
+       这里按岛顶的宽度和可用高度算一块落鸟区，
+       用两个不同频率的随机把鸟铺开，看起来才像散落的。 */
+    const perchX = (u) => sh.top.x - sh.top.span / 2 + u * sh.top.span;
+    const perchY = (v) => sh.top.y - v * H * 0.055;
+
+    // ── 假鸟：站在岛面上，数量对应档位
+    // 假的要一眼看出是假的：灰白、僵直、亮度比真鸟低
     const n = decoy === 'few' ? 3 : decoy === 'mid' ? 12 : decoy === 'many' ? 28 : 0;
     for (let i = 0; i < n; i++) {
       const r2 = mulberry32(4500 + i * 13);
-      const px = sh.top.x - sh.top.span / 2 + r2() * sh.top.span;
-      const py = sh.top.y - r2() * H * 0.02;
-      glyph(ctx, px, py, 0.62, '#8d948a', 0.72);
+      // 越往后越靠里，形成前后两层，不叠在一处
+      const u = (i + 0.5) / n + (r2() - 0.5) * (0.9 / n);
+      const v = r2();
+      glyph(ctx, perchX(Math.max(0.02, Math.min(0.98, u))), perchY(v), 0.78, '#e8e4d8', 0.9);
     }
 
     // ── 声音：从岛向外扩散的弧
@@ -266,30 +326,48 @@ export function drawTernPanorama(canvas, s = {}) {
         let px;
         let py;
         if (grounded) {
-          // 落在岛上
-          px = sh.top.x - sh.top.span / 2 + r3() * sh.top.span;
-          py = sh.top.y - r3() * H * 0.03;
+          // 落在岛面上，铺开而不是排队
+          const u = (i + 0.5) / Math.max(1, Math.min(nests, show)) + (r3() - 0.5) * 0.1;
+          px = perchX(Math.max(0.03, Math.min(0.97, u)));
+          py = perchY(0.15 + r3() * 0.8);
         } else {
-          // 在天上盘旋，越靠上越远
-          const ang = r3() * Math.PI * 2 + t * 0.34;
-          const rad = W * (0.12 + r3() * 0.26);
+          // 天上盘旋：分几层高度，不要挤成一个环
+          const ang = r3() * Math.PI * 2 + t * 0.3;
+          const rad = W * (0.1 + r3() * 0.3);
+          const layer = H * (0.05 + r3() * 0.13);
           px = sh.top.x + Math.cos(ang) * rad;
-          py = sh.top.y - H * 0.14 + Math.sin(ang) * rad * 0.4;
+          py = sh.top.y - layer + Math.sin(ang) * rad * 0.32;
         }
-        glyph(ctx, px, py, 0.74 + r3() * 0.3, '#3a3f38', 0.52 + r3() * 0.34);
+        glyph(ctx, px, py, 0.8 + r3() * 0.34, '#3a3f38', 0.5 + r3() * 0.36);
       }
     }
   }
 
-  // 还没选岛
+  /* 还没选岛：画三座岛的剪影，让空画面有东西可看，
+     但不标名字和序号——底部已经有三张带说明的卡，
+     画布上再标一遍只会造成两套编号对不上。 */
   if (!island) {
-    ctx.save();
-    ctx.globalAlpha = 0.32;
-    ctx.fillStyle = '#5a625b';
-    ctx.font = '14px "Kaiti SC", KaiTi, 楷体, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('先选一座岛', W / 2, H * 0.2);
-    ctx.restore();
+    const opts = [
+      { id: 'reef', cx: 0.19 },
+      { id: 'sandbar', cx: 0.5 },
+      { id: 'pond', cx: 0.81 },
+    ];
+    opts.forEach((op) => {
+      const sh = islandShape(op.id, W, H);
+      const dx = (op.cx - 0.45) * W;
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.beginPath();
+      ctx.moveTo(sh.pts[0][0] + dx, sh.pts[0][1]);
+      for (let k = 1; k < sh.pts.length; k++) ctx.lineTo(sh.pts[k][0] + dx, sh.pts[k][1]);
+      ctx.closePath();
+      ctx.fillStyle = hexA('#8d948a', 0.26);
+      ctx.fill();
+      ctx.strokeStyle = hexA('#4a5048', 0.55);
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+    });
   }
 
   // 角章
@@ -308,8 +386,23 @@ export function glyph(ctx, x, y, scale = 1, color = '#3a3f38', alpha = 0.7) {
   const s = 7 * scale;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = color;
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(0.7, 1.2 * scale);
+
+  // 浅色的鸟在浅色岛面上会糊掉，先垫一层极淡的暗边
+  const lum = parseInt(color.slice(1, 3), 16);
+  if (lum > 200) {
+    ctx.strokeStyle = 'rgba(58,63,56,0.18)';
+    ctx.lineWidth = Math.max(1.4, 2.2 * scale);
+    ctx.beginPath();
+    ctx.moveTo(x - s * 1.5, y + s * 0.24);
+    ctx.quadraticCurveTo(x - s * 0.6, y - s * 0.5, x, y);
+    ctx.quadraticCurveTo(x + s * 0.6, y - s * 0.5, x + s * 1.5, y + s * 0.24);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = color;
   ctx.lineWidth = Math.max(0.7, 1.2 * scale);
   ctx.beginPath();
   ctx.moveTo(x - s * 1.5, y + s * 0.24);

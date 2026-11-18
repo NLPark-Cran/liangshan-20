@@ -2853,17 +2853,20 @@ export function drawLedgerPanorama(canvas, s = {}) {
 
   // 矿坑：随深度变宽变深，位置在山腰
   if (mineDepth > 0.03) {
-    pit(ctx, W * 0.34, H * 0.665, {
-      r: W * (0.075 + mineDepth * 0.1),
+    /* 半径别跟着深度线性放大到失控：
+       挖满时坑要显眼，但不能把整座山吞掉。 */
+    pit(ctx, W * 0.33, H * 0.645, {
+      r: W * (0.085 + mineDepth * 0.075),
       depth: Math.min(1, mineDepth),
       seed: seed + 21,
-      alpha: 0.5 + mineDepth * 0.22,
+      alpha: 0.55 + mineDepth * 0.22,
       color: '#8a6733',
     });
-    for (let i = 0; i < Math.round(mineDepth * 7); i++) {
-      rockCluster(ctx, W * (0.24 + rnd() * 0.28), H * (0.72 + rnd() * 0.06), {
+    // 坑口的碎石：挖一年堆一年
+    for (let i = 0; i < Math.round(mineDepth * 8); i++) {
+      rockCluster(ctx, W * (0.24 + rnd() * 0.2), H * (0.7 + rnd() * 0.055), {
         seed: seed + 300 + i * 23,
-        size: 6 + rnd() * 12,
+        size: 6 + rnd() * 10,
         alpha: 0.3,
         color: '#7a5a2c',
       });
@@ -2871,6 +2874,47 @@ export function drawLedgerPanorama(canvas, s = {}) {
   }
 
   haze(ctx, W, H * 0.74, { alpha: 0.6 - mineDepth * 0.2, seed: seed + 31, height: H * 0.055 });
+
+  /* 山脚缓坡：山体只填到 0.7H，村落在 0.84H 才开始，
+     中间那一段原来是空的，看着像断层。补一层坡把两者接上。 */
+  const slopeY = H * 0.7;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, slopeY + H * 0.01);
+  ctx.bezierCurveTo(W * 0.3, slopeY - H * 0.012, W * 0.66, slopeY + H * 0.022, W, slopeY - H * 0.006);
+  ctx.lineTo(W, H * 0.86);
+  ctx.lineTo(0, H * 0.86);
+  ctx.closePath();
+  const sg = ctx.createLinearGradient(0, slopeY, 0, H * 0.86);
+  sg.addColorStop(0, hexA(hp > 0.5 ? '#8fa07a' : '#b9a675', 0.16));
+  sg.addColorStop(1, hexA(hp > 0.5 ? '#8fa07a' : '#b9a675', 0.07));
+  ctx.fillStyle = sg;
+  ctx.fill();
+  ctx.restore();
+
+  // 坡上的等高线：几道顺着地形的横线，把中间这块撑住
+  for (let i = 0; i < 4; i++) {
+    const y = H * (0.735 + i * 0.028);
+    inkStroke(
+      ctx,
+      [
+        [W * 0.03, y],
+        [W * 0.34, y + (rnd() - 0.5) * 4],
+        [W * 0.68, y + (rnd() - 0.5) * 3],
+        [W * 0.97, y + (rnd() - 0.5) * 4],
+      ],
+      {
+        color: '#7b8478',
+        width: 0.9,
+        alpha: 0.1,
+        seed: seed + 640 + i * 13,
+        wobble: 0.8,
+        dry: 0.42,
+        layers: 1,
+        taper: false,
+      }
+    );
+  }
 
   // 树：健康才长得回来
   const treeCount = Math.round(hp * 11);
@@ -2934,10 +2978,14 @@ export function drawLedgerPanorama(canvas, s = {}) {
     alpha: 0.1 + hp * 0.14,
   });
 
+  /* 左上角的状态标签。
+     原来画在 y=30，canvas 顶部会被覆盖层的顶栏压住一点，
+     文字上半截被裁，看着像乱码。这里下移到安全区。 */
   ctx.save();
-  ctx.fillStyle = 'rgba(90,98,91,0.55)';
-  ctx.font = '12px "Kaiti SC", KaiTi, 楷体, serif';
+  ctx.fillStyle = 'rgba(90,98,91,0.62)';
+  ctx.font = '13px "Kaiti SC", KaiTi, 楷体, serif';
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
   const label = closed
     ? hp > 0.72
       ? '山养回来了'
@@ -2946,8 +2994,8 @@ export function drawLedgerPanorama(canvas, s = {}) {
         : '刚停下'
     : mineDepth > 0.5
       ? '山一直在被挖'
-      : '还没动';
-  ctx.fillText(label, 22, 30);
+      : '还在开采';
+  ctx.fillText(label, 26, 46);
   ctx.restore();
 
   seal(ctx, W - 40, H - 38, {

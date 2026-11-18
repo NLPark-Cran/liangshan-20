@@ -603,7 +603,7 @@
   align-items: baseline;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-top: var(--s5);
+  margin-top: var(--s4);
   padding: 0.6rem 0.85rem;
   background: rgba(109, 143, 138, 0.09);
   border-left: 2px solid var(--water);

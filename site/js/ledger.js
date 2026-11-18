@@ -272,7 +272,7 @@ function renderPlay() {
     <div class="g__row">
       <span class="g__lab">年份</span>
       ${trackHTML()}
-      <span class="g__read"><b id="lg-year">${S.year}</b></span>
+      <span class="g__read"><b class="g__big" id="lg-year">${S.year}</b></span>
     </div>
 
     <div class="g__row">
@@ -297,9 +297,9 @@ function renderPlay() {
       <span class="g__lab">账本</span>
       <div class="g__read">
         <span>村集体年收入</span><b id="lg-cash">${cur.cash}</b><span>万元</span>
-        <span>·</span>
+        <span class="g__dot">·</span>
         <span>山</span><b id="lg-mtn">${cur.mountain}%</b>
-        <span>·</span>
+        <span class="g__dot">·</span>
         <span>矿</span><b id="lg-ore">${cur.reserve <= 0 ? '空了' : cur.reserve + '%'}</b>
       </div>
     </div>
@@ -315,7 +315,9 @@ function renderPlay() {
               ? `<p class="g__note">矿已经在 ${S.closedYear} 年关了。山一年年往回长。</p>`
               : `<p class="g__note">2009 年起，村民大会开始提关矿这件事。</p>`
       }
-      <button class="g__go g__go--quiet" id="lg-end">推到 2025，看最后</button>
+      <div class="g__acts">
+        <button class="g__go g__go--quiet" id="lg-end">推到 2025，看最后</button>
+      </div>
     </div>
   `;
 
@@ -468,11 +470,11 @@ function renderOver() {
       <span class="g__lab">二十年</span>
       <div class="g__read">
         <span>${closed ? `${closed} 年关的矿` : '一直没关矿'}</span>
-        <span>·</span>
-        <span>最难看的一年</span><b>${lowest}</b><span>万元</span>
-        <span>·</span>
+        <span class="g__dot">·</span>
+        <span>最少的一年</span><b>${lowest}</b><span>万元</span>
+        <span class="g__dot">·</span>
         <span>2025 年的山</span><b>${last.mountain}%</b>
-        <span>·</span>
+        <span class="g__dot">·</span>
         <span>2025 年的收入</span><b>${last.cash}</b><span>万元</span>
       </div>
     </div>
@@ -488,7 +490,9 @@ function renderOver() {
           ? `山是能养回来的，但要花二十年，还要先掏一笔 ${rows.find((r) => r.closedNow)?.debt ?? 0} 万的修复钱。真实的事比这慢得多。`
           : '矿挖完了，山也秃了。挖出来的坑要修复，这笔钱村里还没算过。'
       }</p>
-      <button class="g__go g__go--quiet" id="lg-again">再来一次</button>
+      <div class="g__acts">
+        <button class="g__go g__go--quiet" id="lg-again">再来一次</button>
+      </div>
     </div>
   `;
 

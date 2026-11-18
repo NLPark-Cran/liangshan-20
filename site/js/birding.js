@@ -20,6 +20,7 @@ import {
 import { buildScene, drawBirdScene, LENS_R } from './birdscene.js';
 import { auth, drawBird } from './api.js';
 import { loadStickerIndex, stickerUrl, warmUp } from './sticker.js';
+import { preloadBirds } from './birdimg.js';
 
 const STORE_KEY = 'liangshan20.birdlog.v2';
 
@@ -96,7 +97,15 @@ export function openBirding() {
   stageEl = document.getElementById('bird-stage');
   panelEl = document.getElementById('bird-panel');
 
-  newRound();
+  /* 贴纸索引没就绪时 buildScene 拿不到贴图地址，
+     只能画手绘轮廓。所以先等索引（本地 7KB，很快），
+     再开这一局，第一眼就是真图。 */
+  loadStickerIndex()
+    .catch(() => null)
+    .then(() => {
+      newRound();
+    });
+
   bindStage();
   startLoop();
 }
@@ -128,6 +137,10 @@ function newRound() {
   t0 = performance.now();
   hideHint(false);
   renderPanel();
+
+  // 贴图要下载 + 处理，先画手绘轮廓顶着，就绪后自动换成真图
+  const urls = round.birds.map((b) => b._img).filter(Boolean);
+  if (urls.length) preloadBirds(urls);
 }
 
 function startLoop() {
@@ -288,23 +301,27 @@ function renderPanel() {
     <div class="g__row">
       <div class="g__read">
         <span>这一片还有</span><b>${left}</b><span>只没找到</span>
-        <span>·</span>
+        <span class="g__dot">·</span>
         <span>手账里已记</span><b>${seenCount}</b><span>种</span>
       </div>
-      <button class="g__go g__go--quiet" id="bd-codex">看全部图鉴</button>
-      <button class="g__go" id="bd-again">换一片生境</button>
+      <div class="g__acts">
+        <button class="g__go g__go--quiet" id="bd-codex">看全部图鉴</button>
+        <button class="g__go" id="bd-again">换一片生境</button>
+      </div>
     </div>
 
     ${
       c
         ? `<div class="g__row">
-             <span class="g__lab">记下了</span>
-             <div class="g__read">
-               <span class="bd__crare" style="--rc:${r.color}">${r.label}</span>
-               <b>${esc(c.s)}</b>
-               <span>${esc(c.en)}</span>
+             <div class="rec" style="--rc:${r.color}">
+               <div class="rec__head">
+                 <span class="rec__mark">记下了</span>
+                 <span class="rec__name">${esc(c.s)}</span>
+                 <span class="rec__tag">${r.label}</span>
+               </div>
+               <div class="rec__sub">${esc(c.en)}</div>
+               <p class="rec__tip">${esc(c.tip)}</p>
              </div>
-             <p class="g__note">${esc(c.tip)}</p>
            </div>`
         : `<div class="g__row">
              <span class="g__lab">提示</span>

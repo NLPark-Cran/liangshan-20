@@ -10,6 +10,8 @@
 
 import { inkStroke, mulberry32, hexA, mistBand } from './brush.js';
 import { mountain, treeShape, treeGroup, haze, water, reeds, bird as birdGlyph, stone } from './inkfig.js';
+import { getBirdImage } from './birdimg.js';
+import { stickerUrl } from './sticker.js';
 
 /** 望远镜有效半径（相对画布短边），birding.js 判定命中时也用它 */
 export const LENS_R = 0.26;
@@ -69,6 +71,8 @@ export function buildScene(site, log, o = {}) {
     // 会动：翅膀抖动相位
     sp._ph = rnd() * Math.PI * 2;
     sp._drift = sp.r === 'C' ? 0.7 : 0.32;
+    // 真实贴图地址（可能为 null，绘制时回退手绘）
+    sp._img = stickerUrl(sp.s);
   });
 
   return { birds, seed };
@@ -187,18 +191,34 @@ export function drawBirdScene(canvas, s = {}) {
       drawRidge(ctx, w, h, seed, rnd);
   }
 
-  // 鸟：一直画，但非常淡，靠玩家扫
+  /* 鸟：有真实贴图就画贴图，没有才回退到手绘轮廓。
+     贴图在 birdimg.js 里已经做过去饱和和压墨，能融进纸面。 */
   birds.forEach((b, i) => {
     const got = found.has(`${b.s}-${i}`);
     const bob = Math.sin(t * 1.6 + b._ph) * 2.2 * b._drift;
-    // bird() 只吃 size/color/alpha/seed，所以让翅膀微动靠横向微位移
     const sway = Math.sin(t * 5 + b._ph) * 1.6;
-    birdGlyph(ctx, b._x + sway, b._y + bob, {
-      size: b._r,
-      color: got ? '#9d3a30' : '#2f3a35',
-      alpha: got ? 0.92 : 0.42,
-      seed: 300 + i * 13,
-    });
+    const px = b._x + sway;
+    const py = b._y + bob;
+
+    const pic = b._img ? getBirdImage(b._img) : null;
+    if (pic) {
+      // 贴图比手绘面积大，按半径换算成边长
+      const side = b._r * 2.6;
+      ctx.save();
+      ctx.globalAlpha = got ? 0.94 : 0.62;
+      // 越稀有的越淡，逼玩家凑近看
+      if (!got) ctx.globalAlpha *= b.r === 'X' ? 0.7 : b.r === 'M' ? 0.82 : 1;
+      ctx.drawImage(pic, px - side / 2, py - side / 2, side, side);
+      ctx.restore();
+    } else {
+      birdGlyph(ctx, px, py, {
+        size: b._r,
+        color: got ? '#9d3a30' : '#2f3a35',
+        alpha: got ? 0.92 : 0.42,
+        seed: 300 + i * 13,
+      });
+    }
+
     if (got) {
       // 已记录：细虚线一圈，不要抢画面
       const rr = b._r * 1.35;
@@ -207,7 +227,7 @@ export function drawBirdScene(canvas, s = {}) {
       ctx.lineWidth = 0.9;
       ctx.setLineDash([3, 4]);
       ctx.beginPath();
-      ctx.arc(b._x + sway, b._y + bob, rr, 0, Math.PI * 2);
+      ctx.arc(px, py, rr, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

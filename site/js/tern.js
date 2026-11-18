@@ -195,7 +195,7 @@ function renderChoose() {
         ${DECOYS.map(
           (it) => `
           <button class="chip ${S.decoy === it.id ? 'is-on' : ''}" data-decoy="${it.id}">
-            <span class="chip__n">${it.name}<em style="font-size:.66rem;color:var(--ink-300);margin-left:.3rem">耗 ${it.cost}</em></span>
+            <span class="chip__n">${it.name}<em class="chip__cost">耗 ${it.cost}</em></span>
             <span class="chip__d">${it.desc}</span>
           </button>`
         ).join('')}
@@ -208,7 +208,7 @@ function renderChoose() {
         ${SOUNDS.map(
           (it) => `
           <button class="chip ${S.sound === it.id ? 'is-on' : ''}" data-sound="${it.id}">
-            <span class="chip__n">${it.name}<em style="font-size:.66rem;color:var(--ink-300);margin-left:.3rem">耗 ${it.cost}</em></span>
+            <span class="chip__n">${it.name}<em class="chip__cost">耗 ${it.cost}</em></span>
             <span class="chip__d">${it.desc}</span>
           </button>`
         ).join('')}
@@ -218,16 +218,18 @@ function renderChoose() {
     <div class="g__row">
       <span class="g__lab">电力人力</span>
       <div class="g__read">
-        <b style="color:${over ? 'var(--cinnabar)' : 'inherit'}">${spent} / ${BUDGET}</b>
+        <b class="${over ? 'is-over' : ''}">${spent}</b><span>/ ${BUDGET}</span>
+        ${
+          over
+            ? '<span class="g__dot">·</span><span class="g__warn">超了，得省一样</span>'
+            : !S.island
+              ? '<span class="g__dot">·</span><span>还没选岛</span>'
+              : ''
+        }
       </div>
-      <p class="g__note ${over ? 'is-warn' : ''}">${
-        over
-          ? '超了。钱只够一样拉满，另一样得省着用。'
-          : !S.island
-            ? '先选一座岛。'
-            : '摆好就等，鸟来不来不由人。'
-      }</p>
-      <button class="g__go" id="tn-go" ${canGo ? '' : 'disabled'}>等一个繁殖季</button>
+      <div class="g__acts">
+        <button class="g__go" id="tn-go" ${canGo ? '' : 'disabled'}>等一个繁殖季</button>
+      </div>
     </div>
   `;
 
@@ -337,12 +339,18 @@ function renderResult() {
     <div class="g__row">
       <span class="g__lab">第 ${S.round + 1} 季 · ${MONTHS[Math.min(S.round, 4)]}</span>
       <div class="g__read">
-        <b style="color:${arrived ? 'var(--bamboo)' : 'var(--ochre)'}">${
-          arrived ? `来了 ${last.birds} 只` : '没有来'
+        <b class="g__big" style="color:${arrived ? 'var(--bamboo)' : 'var(--ochre)'}">${
+          arrived ? last.birds : 0
         }</b>
-        ${arrived ? `<span>筑巢 ${last.nests}</span><span>·</span><span>出飞</span><b>${last.chicks}</b><span>雏</span>` : ''}
-        <span>·</span>
-        <span>判断概率</span><b>${Math.round(last.p * 100)}%</b>
+        <span>${arrived ? '只落下来' : '一只也没来'}</span>
+        ${
+          arrived
+            ? `<span class="g__dot">·</span><span>筑巢</span><b>${last.nests}</b>
+               <span class="g__dot">·</span><span>出飞</span><b>${last.chicks}</b><span>雏</span>`
+            : ''
+        }
+        <span class="g__dot">·</span>
+        <span>估计概率</span><b>${Math.round(last.p * 100)}%</b>
       </div>
     </div>
 
@@ -352,7 +360,9 @@ function renderResult() {
           ? '它们落在礁石上，先是几只，然后一片白。护鸟的人退到观测棚里，数巢、记环志、不敢大声说话。'
           : '这一季的礁石上只有假鸟。它们站在那儿，一直站到八月结束。招引从来不是一次就能成的事。'
       }</p>
-      <button class="g__go" id="tn-next">${S.round >= 4 ? '看看这五年' : '下一个繁殖季'}</button>
+      <div class="g__acts">
+        <button class="g__go" id="tn-next">${S.round >= 4 ? '看看这五年' : '下一个繁殖季'}</button>
+      </div>
     </div>
   `;
 
@@ -376,9 +386,9 @@ function renderEnd() {
     <div class="g__row">
       <span class="g__lab">五年</span>
       <div class="g__read">
-        <span>有鸟落下</span><b>${success}</b><span>季</span>
-        <span>·</span>
-        <span>一共飞出</span><b>${total}</b><span>只雏鸟</span>
+        <span>有鸟落下</span><b class="g__big">${success}</b><span>季</span>
+        <span class="g__dot">·</span>
+        <span>一共飞出</span><b class="g__big">${total}</b><span>只雏鸟</span>
       </div>
       <div class="tn__season">
         ${S.seasons
@@ -396,7 +406,9 @@ function renderEnd() {
           ? '它们一年只产一枚卵，孵不成就得再等一年。所以每一只出飞的雏鸟，都算得上一次侥幸。'
           : '这五季，一只也没飞出来。假鸟在礁石上，站了五年。真实项目里，有的岛试了好几年。'
       }</p>
-      <button class="g__go g__go--quiet" id="tn-again">再守五年</button>
+      <div class="g__acts">
+        <button class="g__go g__go--quiet" id="tn-again">再守五年</button>
+      </div>
     </div>
 
     <div class="g__row">

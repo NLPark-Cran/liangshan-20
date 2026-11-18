@@ -13,11 +13,11 @@
 /* ────────────────────────── 稀有度 ────────────────────────── */
 
 export const RARITY = {
-  C: { key: 'C', label: '常', desc: '该地点该季稳定可见', weight: 100, color: '#7c9160' },
-  U: { key: 'U', label: '有', desc: '需要一点运气', weight: 38, color: '#6d8f8a' },
-  R: { key: 'R', label: '稀', desc: '一年只几回', weight: 9, color: '#b8912f' },
-  M: { key: 'M', label: '迷', desc: '迷鸟，记录稀少', weight: 1.6, color: '#b1813f' },
-  X: { key: 'X', label: '神', desc: '传说级，极难遇见', weight: 0.18, color: '#9d3a30' },
+  C: { key: 'C', label: '常见', desc: '该地点该季稳定可见', weight: 100, color: '#7c9160' },
+  U: { key: 'U', label: '少见', desc: '需要一点运气', weight: 38, color: '#6d8f8a' },
+  R: { key: 'R', label: '稀有', desc: '一年只几回', weight: 9, color: '#b8912f' },
+  M: { key: 'M', label: '迷鸟', desc: '迷鸟，记录稀少', weight: 1.6, color: '#b1813f' },
+  X: { key: 'X', label: '极罕', desc: '传说级，极难遇见', weight: 0.18, color: '#9d3a30' },
 };
 
 /* ────────────────────────── 地点 ────────────────────────── */
