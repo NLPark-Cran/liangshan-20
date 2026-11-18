@@ -1,80 +1,73 @@
 /**
  * tern.js — 「等一只鸟回来」：中华凤头燕鸥招引推演
  *
- * 机制取自真实做法：
- *   在海岛上摆假鸟 + 用太阳能设备回放叫声，把远洋的燕鸥吸引到岛上繁殖。
- *   这套办法在浙江象山的韭山列岛做过，是这个物种从灭绝边缘被拉回来的关键。
+ * 重做原因：上一版整个右栏是三组选项的表单，左边画布几乎空白，
+ * 点「等一个繁殖季」等两秒、出一行结论，玩完不知道自己在干什么。
  *
- * 游戏的核心不是赢，是等。
- * 玩家能做的只有三件事：选岛、摆假鸟、放声音。鸟来不来，不由玩家决定。
+ * 这一版把决策放回画面上：岛在眼前，假鸟真的站在礁石上，
+ * 声音用一圈一圈的波纹看得见。玩家选岛、定假鸟数、定放声音的时段，
+ * 然后亲眼看着鸟从海上来，或者不来。
  */
 
-import { drawTernIsland } from './tern-scene.js';
+import { drawTernPanorama } from './tern-scene.js';
 import { auth, submitTern } from './api.js';
 
-/* ────────────────────────── 配置 ────────────────────────── */
+/* ────────────────────────── 参数 ────────────────────────── */
 
 const ISLANDS = [
   {
     id: 'reef',
     name: '礁岩小岛',
-    desc: '高高露出海面的礁石，四周浪大，船靠不上去。燕鸥喜欢这种地方，人不好打扰。',
-    base: 0.16,
-    risk: 0.06,
-    note: '鸟类天然偏好：开阔、无哺乳类天敌、接近觅食海域',
+    desc: '四周浪大，船靠不上去，人不好打扰',
+    base: 0.2,
+    risk: 0.05,
   },
   {
     id: 'sandbar',
     name: '沙洲',
-    desc: '低平的沙洲，涨潮时会淹掉一半。省事，但卵容易被浪卷走。',
-    base: 0.12,
-    risk: 0.14,
-    note: '巢位容易受潮位影响，繁殖失败率高',
+    desc: '低平，涨潮会淹掉一半，卵容易被卷走',
+    base: 0.14,
+    risk: 0.15,
   },
   {
     id: 'pond',
     name: '鱼塘埂',
-    desc: '养殖塘之间的窄埂，靠近人的活动。鸟会来，但待不长。',
-    base: 0.08,
-    risk: 0.18,
-    note: '人为干扰大，适合过渡不适合长期繁殖',
+    desc: '靠近人的活动，鸟会来，但待不长',
+    base: 0.09,
+    risk: 0.19,
   },
 ];
 
-/* 每个繁殖季的电力与人力预算。
-   这是游戏的核心约束：摆假鸟和放声音都要耗电，
-   预算不够两者同时拉满，必须取舍。 */
-const BUDGET = 4;
-
 const DECOYS = [
-  { id: 'few', name: '摆 3 只', value: 0.34, cost: 1, desc: '太少，鸟群看不见' },
-  { id: 'mid', name: '摆 12 只', value: 0.62, cost: 2, desc: '一个能引起注意的小群' },
-  { id: 'many', name: '摆 30 只', value: 0.86, cost: 3, desc: '像模像样的一群，效果最好' },
+  { id: 'few', name: '3 只', value: 0.34, cost: 1, desc: '太少，鸟群看不见' },
+  { id: 'mid', name: '12 只', value: 0.62, cost: 2, desc: '一个能引起注意的小群' },
+  { id: 'many', name: '30 只', value: 0.86, cost: 3, desc: '像模像样的一群' },
 ];
 
 const SOUNDS = [
-  { id: 'day', name: '只在白天放', value: 0.3, cost: 1, desc: '省电，但夜里回岛的鸟听不到' },
-  { id: 'dusk', name: '黄昏到入夜', value: 0.72, cost: 2, desc: '燕鸥多在傍晚归岛，这个时段最有效' },
-  { id: 'all', name: '整夜不停', value: 0.9, cost: 3, desc: '效果最好，耗电也最多，需要备电' },
+  { id: 'day', name: '只在白天', value: 0.3, cost: 1, desc: '夜里回岛的鸟听不到' },
+  { id: 'dusk', name: '黄昏到入夜', value: 0.72, cost: 2, desc: '燕鸥多在傍晚归岛' },
+  { id: 'all', name: '整夜不停', value: 0.9, cost: 3, desc: '效果最好，最耗电' },
 ];
 
+const BUDGET = 4;
 const MONTHS = ['四月', '五月', '六月', '七月', '八月'];
 
 /* ────────────────────────── 状态 ────────────────────────── */
 
 function newGame() {
   return {
-    round: 0, // 第几个繁殖季
+    round: 0,
     island: null,
-    decoy: null,
-    sound: null,
-    phase: 'choose', // choose | waiting | result | season-end | end
-    birds: 0, // 今年到岛上的燕鸥数
-    nests: 0, // 筑巢数
-    chicks: 0, // 出飞雏鸟数
-    totalChicks: 0,
+    decoy: 'mid',
+    sound: 'dusk',
+    phase: 'choose', // choose | waiting | result | end
+    birds: 0,
+    nests: 0,
+    chicks: 0,
     seasons: [],
-    lastRoll: 0,
+    cap: null, // 这一季的结算摘要，用于浮层
+    lastP: 0,
   };
 }
 
@@ -83,6 +76,8 @@ let canvasEl = null;
 let panelEl = null;
 let rafId = null;
 let lastTernKey = '';
+let waitingUntil = 0;
+let animBirds = 0; // 用于让鸟一只一只落下来
 
 /* ────────────────────────── 入口 ────────────────────────── */
 
@@ -97,8 +92,9 @@ export function openTern() {
   panelEl = document.getElementById('tern-panel');
   S = newGame();
   lastTernKey = '';
+  animBirds = 0;
   renderPanel();
-  startArtLoop();
+  startLoop();
 }
 
 export function closeTern() {
@@ -115,27 +111,41 @@ export function closeTern() {
   }, 300);
 }
 
-/* ────────────────────────── 绘制循环 ────────────────────────── */
+/* ────────────────────────── 绘制 ────────────────────────── */
 
-function startArtLoop() {
-  if (!canvasEl) return;
-  const draw = () => {
+function startLoop() {
+  if (rafId) cancelAnimationFrame(rafId);
+  let last = 0;
+  const tick = (now) => {
     if (!canvasEl || !canvasEl.isConnected) {
       rafId = null;
       return;
     }
-    drawTernIsland(canvasEl, {
-      island: S.island,
-      decoy: S.decoy,
-      birds: S.birds,
-      nests: S.nests,
-      phase: S.phase,
-      t: performance.now() / 1000,
-    });
-    rafId = requestAnimationFrame(draw);
+    if (now - last >= 32) {
+      last = now;
+
+      // 等待期：真鸟一只一只从天上落下来
+      if (S.phase === 'waiting' && S.cap) {
+        const total = S.cap.birds;
+        const left = Math.max(0, waitingUntil - now);
+        const p = 1 - left / 2200;
+        animBirds = Math.round(total * Math.min(1, p));
+      }
+
+      drawTernPanorama(canvasEl, {
+        island: S.island,
+        decoy: S.decoy,
+        sound: S.phase === 'waiting' || S.phase === 'choose' ? S.sound : S.sound,
+        birds: S.phase === 'waiting' ? animBirds : S.birds,
+        nests: S.phase === 'waiting' ? animBirds * 0.4 : S.nests,
+        phase: S.phase,
+        round: S.round,
+        t: now / 1000,
+      });
+    }
+    rafId = requestAnimationFrame(tick);
   };
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(draw);
+  rafId = requestAnimationFrame(tick);
 }
 
 /* ────────────────────────── 面板 ────────────────────────── */
@@ -143,162 +153,152 @@ function startArtLoop() {
 function renderPanel() {
   if (!panelEl) return;
 
-  if (S.phase === 'choose' || S.phase === 'waiting') {
-    renderSetup();
-  } else if (S.phase === 'result') {
-    renderResult();
-  } else if (S.phase === 'season-end') {
-    renderSeasonEnd();
-  } else {
+  if (S.phase === 'end') {
     renderEnd();
+    return;
   }
+  if (S.phase === 'result') {
+    renderResult();
+    return;
+  }
+  if (S.phase === 'waiting') {
+    renderWaiting();
+    return;
+  }
+  renderChoose();
 }
 
-function renderSetup() {
+function renderChoose() {
   const decoy = DECOYS.find((d) => d.id === S.decoy);
   const sound = SOUNDS.find((s) => s.id === S.sound);
   const spent = (decoy?.cost || 0) + (sound?.cost || 0);
   const over = spent > BUDGET;
-  const canGo = S.island && S.decoy && S.sound && !over;
+  const canGo = S.island && !over;
 
   panelEl.innerHTML = `
-    <div class="tern">
-      <div class="tern__head">
-        <h2 class="tern__title">等一只鸟回来</h2>
-        <p class="tern__sub">第 ${S.round + 1} 个繁殖季 · ${MONTHS[Math.min(S.round, 4)]}</p>
+    <div class="g__row">
+      <span class="g__lab">第 ${S.round + 1} 季 · ${MONTHS[Math.min(S.round, 4)]}</span>
+      <div class="g__chips g__chips--even">
+        ${ISLANDS.map(
+          (it) => `
+          <button class="chip ${S.island === it.id ? 'is-on' : ''}" data-island="${it.id}">
+            <span class="chip__n">${it.name}</span>
+            <span class="chip__d">${it.desc}</span>
+          </button>`
+        ).join('')}
       </div>
+    </div>
 
-      <div class="tern__intro">
-        <p>五月，海上的一座小岛。护鸟的人在礁石上摆好假鸟，接上太阳能电池，把叫声放出去。</p>
-        <p>剩下的事，得等。</p>
+    <div class="g__row">
+      <span class="g__lab">摆假鸟</span>
+      <div class="g__chips g__chips--even">
+        ${DECOYS.map(
+          (it) => `
+          <button class="chip ${S.decoy === it.id ? 'is-on' : ''}" data-decoy="${it.id}">
+            <span class="chip__n">${it.name}<em style="font-size:.66rem;color:var(--ink-300);margin-left:.3rem">耗 ${it.cost}</em></span>
+            <span class="chip__d">${it.desc}</span>
+          </button>`
+        ).join('')}
       </div>
+    </div>
 
-      <div class="tern__budget ${over ? 'is-over' : ''}">
-        <span>这个季度的电力和人力</span>
-        <b>${spent} / ${BUDGET}</b>
-        <i>${over ? '超了，得省一样' : '摆假鸟和放声音都要耗电'}</i>
+    <div class="g__row">
+      <span class="g__lab">放声音</span>
+      <div class="g__chips g__chips--even">
+        ${SOUNDS.map(
+          (it) => `
+          <button class="chip ${S.sound === it.id ? 'is-on' : ''}" data-sound="${it.id}">
+            <span class="chip__n">${it.name}<em style="font-size:.66rem;color:var(--ink-300);margin-left:.3rem">耗 ${it.cost}</em></span>
+            <span class="chip__d">${it.desc}</span>
+          </button>`
+        ).join('')}
       </div>
+    </div>
 
-      <div class="tern__step">
-        <h3 class="tern__st">一 · 选岛</h3>
-        <div class="tern__opts">
-          ${ISLANDS.map(
-            (it) => `
-            <button class="opt ${S.island === it.id ? 'is-on' : ''}" data-group="island" data-id="${it.id}">
-              <span class="opt__n">${it.name}</span>
-              <span class="opt__d">${it.desc}</span>
-              <span class="opt__note">${it.note}</span>
-            </button>`
-          ).join('')}
-        </div>
+    <div class="g__row">
+      <span class="g__lab">电力人力</span>
+      <div class="g__read">
+        <b style="color:${over ? 'var(--cinnabar)' : 'inherit'}">${spent} / ${BUDGET}</b>
       </div>
-
-      <div class="tern__step">
-        <h3 class="tern__st">二 · 摆假鸟 <em class="tern__cost">耗电 1—3</em></h3>
-        <div class="tern__opts tern__opts--row">
-          ${DECOYS.map(
-            (it) => `
-            <button class="opt opt--sm ${S.decoy === it.id ? 'is-on' : ''}" data-group="decoy" data-id="${it.id}">
-              <span class="opt__n">${it.name}<em>${it.cost}</em></span>
-              <span class="opt__d">${it.desc}</span>
-            </button>`
-          ).join('')}
-        </div>
-      </div>
-
-      <div class="tern__step">
-        <h3 class="tern__st">三 · 放声音 <em class="tern__cost">耗电 1—3</em></h3>
-        <div class="tern__opts tern__opts--row">
-          ${SOUNDS.map(
-            (it) => `
-            <button class="opt opt--sm ${S.sound === it.id ? 'is-on' : ''}" data-group="sound" data-id="${it.id}">
-              <span class="opt__n">${it.name}<em>${it.cost}</em></span>
-              <span class="opt__d">${it.desc}</span>
-            </button>`
-          ).join('')}
-        </div>
-      </div>
-
-      <div class="tern__acts">
-        <button class="btn btn--seal" id="tern-wait" ${canGo ? '' : 'disabled'}>
-          等一个繁殖季
-        </button>
-        ${
-          over
-            ? '<span class="tern__tip is-warn">钱只够一样拉满，另一样得省着用</span>'
-            : !canGo
-              ? '<span class="tern__tip">三样都选好才能开始</span>'
-              : ''
-        }
-      </div>
-
-      <p class="tern__tip tern__tip--flow">
-        上一季的选择会留着。想换，点一下已选中的项取消，再选别的。
-      </p>
+      <p class="g__note ${over ? 'is-warn' : ''}">${
+        over
+          ? '超了。钱只够一样拉满，另一样得省着用。'
+          : !S.island
+            ? '先选一座岛。'
+            : '摆好就等，鸟来不来不由人。'
+      }</p>
+      <button class="g__go" id="tn-go" ${canGo ? '' : 'disabled'}>等一个繁殖季</button>
     </div>
   `;
 
-  bindSetup();
+  bindChoose();
 }
 
-function bindSetup() {
-  panelEl.querySelectorAll('.opt').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const g = btn.dataset.group;
-      const id = btn.dataset.id;
-      if (g === 'island') S.island = S.island === id ? null : id;
-      if (g === 'decoy') S.decoy = S.decoy === id ? null : id;
-      if (g === 'sound') S.sound = S.sound === id ? null : id;
-      renderSetup();
+function bindChoose() {
+  panelEl.querySelectorAll('[data-island]').forEach((b) => {
+    b.addEventListener('click', () => {
+      S.island = b.dataset.island;
+      renderPanel();
     });
   });
-
-  const waitBtn = panelEl.querySelector('#tern-wait');
-  waitBtn?.addEventListener('click', () => runSeason());
+  panelEl.querySelectorAll('[data-decoy]').forEach((b) => {
+    b.addEventListener('click', () => {
+      S.decoy = b.dataset.decoy;
+      renderPanel();
+    });
+  });
+  panelEl.querySelectorAll('[data-sound]').forEach((b) => {
+    b.addEventListener('click', () => {
+      S.sound = b.dataset.sound;
+      renderPanel();
+    });
+  });
+  panelEl.querySelector('#tn-go')?.addEventListener('click', runSeason);
 }
 
-/* ────────────────────────── 推演一个繁殖季 ────────────────────────── */
+/* ────────────────────────── 推演一季 ────────────────────────── */
 
 function runSeason() {
   const island = ISLANDS.find((i) => i.id === S.island);
   const decoy = DECOYS.find((d) => d.id === S.decoy);
   const sound = SOUNDS.find((s) => s.id === S.sound);
   if (!island || !decoy || !sound) return;
-  // 预算这道闸门在 render 里已经拦过，这里再校验一次，
-  // 防止状态被别处改到超支还继续跑
   if (decoy.cost + sound.cost > BUDGET) return;
 
+  // 成功率：岛的底子 × 假鸟与声音的合力。
+  // 用加法再取幂，让「一端拉满 + 一端省着」和「两样中等」都有竞争力；
+  // 纯乘法会让两样中等永远占优，选择就没意义了。
+  const mix = decoy.value + sound.value;
+  const p = Math.min(0.92, island.base * Math.pow(mix, 2.1) * 2.6);
+  S.lastP = p;
+
+  const roll = Math.random();
+  const arrived = roll < p;
+
+  let birds = 0;
+  let nests = 0;
+  let chicks = 0;
+  if (arrived) {
+    birds = 8 + Math.round(roll * 40);
+    nests = Math.round(birds * (0.3 + Math.random() * 0.3));
+    const hatch = 0.62 + Math.random() * 0.28 - island.risk;
+    chicks = Math.max(0, Math.round(nests * hatch * 0.72));
+  }
+
+  S.birds = 0;
+  S.nests = 0;
+  S.chicks = 0;
+  S.cap = { arrived, birds, nests, chicks, p };
+  animBirds = 0;
   S.phase = 'waiting';
+  waitingUntil = performance.now() + 2200;
   renderPanel();
 
-  // 成功率：岛的底子 × 假鸟与声音的合力，再乘上随机性。
-  // 用加法再取幂，让「一端拉满 + 一端省着」与「两样都中等」都有竞争力；
-  // 纯乘法会让两样中等永远占优，选择就失去了意义。
-  const mix = decoy.value + sound.value; // 0.64 ~ 1.86
-  const p = Math.min(0.92, island.base * Math.pow(mix, 2.1) * 2.6);
-  const roll = Math.random();
-  S.lastRoll = roll;
-
-  // 「等」的仪式感：三秒后揭晓
   setTimeout(() => {
-    const arrived = roll < p;
-
-    if (arrived) {
-      // 来了多少只
-      const base = 8 + Math.round(roll * 40);
-      S.birds = base;
-      S.nests = Math.round(base * (0.3 + Math.random() * 0.3));
-
-      // 巢的存活：受岛的风险系数影响
-      const hatch = 0.62 + Math.random() * 0.28 - island.risk;
-      S.chicks = Math.max(0, Math.round(S.nests * hatch * 0.72));
-      S.totalChicks += S.chicks;
-    } else {
-      S.birds = 0;
-      S.nests = 0;
-      S.chicks = 0;
-    }
-
+    S.phase = 'result';
+    S.birds = birds;
+    S.nests = nests;
+    S.chicks = chicks;
     S.seasons.push({
       round: S.round,
       island: island.name,
@@ -306,143 +306,119 @@ function runSeason() {
       sound: sound.name,
       p,
       arrived,
-      birds: S.birds,
-      nests: S.nests,
-      chicks: S.chicks,
+      birds,
+      nests,
+      chicks,
     });
-
-    S.phase = 'result';
     renderPanel();
-  }, 2200);
+  }, 2300);
+}
+
+function renderWaiting() {
+  panelEl.innerHTML = `
+    <div class="g__row">
+      <span class="g__lab">第 ${S.round + 1} 季 · ${MONTHS[Math.min(S.round, 4)]}</span>
+      <div class="g__read">
+        <span>假鸟摆好了，声音放出去了</span>
+      </div>
+    </div>
+    <div class="g__row">
+      <p class="g__note">剩下的事，得等。</p>
+    </div>
+  `;
 }
 
 function renderResult() {
   const last = S.seasons[S.seasons.length - 1];
   if (!last) return;
-
   const arrived = last.arrived;
 
   panelEl.innerHTML = `
-    <div class="tern">
-      <div class="tern__head">
-        <h2 class="tern__title">${arrived ? '来了' : '没有来'}</h2>
-        <p class="tern__sub">${MONTHS[Math.min(S.round, 4)]} · ${last.island}</p>
+    <div class="g__row">
+      <span class="g__lab">第 ${S.round + 1} 季 · ${MONTHS[Math.min(S.round, 4)]}</span>
+      <div class="g__read">
+        <b style="color:${arrived ? 'var(--bamboo)' : 'var(--ochre)'}">${
+          arrived ? `来了 ${last.birds} 只` : '没有来'
+        }</b>
+        ${arrived ? `<span>筑巢 ${last.nests}</span><span>·</span><span>出飞</span><b>${last.chicks}</b><span>雏</span>` : ''}
+        <span>·</span>
+        <span>判断概率</span><b>${Math.round(last.p * 100)}%</b>
       </div>
+    </div>
 
-      ${
+    <div class="g__row">
+      <p class="g__note">${
         arrived
-          ? `<div class="tern__result">
-               <div class="tern__stats">
-                 <div class="tr"><span>到岛</span><b>${S.birds}</b><i>只</i></div>
-                 <div class="tr"><span>筑巢</span><b>${S.nests}</b><i>巢</i></div>
-                 <div class="tr"><span>出飞</span><b>${S.chicks}</b><i>雏</i></div>
-               </div>
-               <p class="tern__resnote">
-                 它们落在礁石上，先是几只，然后一片白。护鸟的人退到观测棚里，
-                 数巢、记环志、不敢大声说话。
-               </p>
-             </div>`
-          : `<div class="tern__result">
-               <p class="tern__resnote">
-                 这一季的礁石上只有假鸟。它们站在那儿，一直站到八月结束。
-               </p>
-               <p class="tern__resnote dim">
-                 招引从来不是一次就能成的事。真实项目里，有的岛试了好几年。
-               </p>
-             </div>`
-      }
-
-      <div class="tern__calc">
-        <span>这一季的判断概率</span>
-        <b>${Math.round(last.p * 100)}%</b>
-      </div>
-
-      <div class="tern__acts">
-        <button class="btn btn--seal" id="tern-next">
-          ${S.round >= 4 ? '看看这些年' : '下一个繁殖季'}
-        </button>
-      </div>
+          ? '它们落在礁石上，先是几只，然后一片白。护鸟的人退到观测棚里，数巢、记环志、不敢大声说话。'
+          : '这一季的礁石上只有假鸟。它们站在那儿，一直站到八月结束。招引从来不是一次就能成的事。'
+      }</p>
+      <button class="g__go" id="tn-next">${S.round >= 4 ? '看看这五年' : '下一个繁殖季'}</button>
     </div>
   `;
 
-  panelEl.querySelector('#tern-next')?.addEventListener('click', () => {
+  panelEl.querySelector('#tn-next')?.addEventListener('click', () => {
     S.round += 1;
     S.birds = 0;
     S.nests = 0;
     S.chicks = 0;
-    if (S.round >= 5) {
-      S.phase = 'end';
-    } else {
-      S.phase = 'choose';
-    }
+    S.cap = null;
+    animBirds = 0;
+    S.phase = S.round >= 5 ? 'end' : 'choose';
     renderPanel();
   });
 }
 
-function renderSeasonEnd() {
-  S.phase = 'choose';
-  renderPanel();
-}
-
 function renderEnd() {
   const total = S.seasons.reduce((a, s) => a + s.chicks, 0);
-  const successYears = S.seasons.filter((s) => s.arrived).length;
+  const success = S.seasons.filter((s) => s.arrived).length;
 
   panelEl.innerHTML = `
-    <div class="tern">
-      <div class="tern__head">
-        <h2 class="tern__title">五年过去了</h2>
-        <p class="tern__sub">${successYears} 个繁殖季有鸟落下</p>
+    <div class="g__row">
+      <span class="g__lab">五年</span>
+      <div class="g__read">
+        <span>有鸟落下</span><b>${success}</b><span>季</span>
+        <span>·</span>
+        <span>一共飞出</span><b>${total}</b><span>只雏鸟</span>
       </div>
-
-      <div class="tern__result">
-        <p class="tern__resnote">
-          ${
-            total > 0
-              ? `这五季，这座岛上总共飞出 ${total} 只雏鸟。`
-              : '这五季，一只也没飞出来。假鸟在礁石上，站了五年。'
-          }
-        </p>
-        <p class="tern__resnote">
-          这个物种在野外只剩很小的种群。它们一年只产一枚卵，孵不成就得再等一年。
-          所以每一只出飞的雏鸟，都算得上是一次侥幸。
-        </p>
-        <p class="tern__resnote tern__resnote--fact">
-          象山韭山列岛从 2013 年开始招引，到 2025 年累计孵出 214 只雏鸟，
-          占全球繁殖总量的八成以上。幼鸟成活率从三成升到了五成。
-        </p>
-      </div>
-
-      <div class="tern__timeline">
+      <div class="tn__season">
         ${S.seasons
           .map(
-            (s) => `
-            <div class="tl">
-              <span class="tl__y">第 ${s.round + 1} 季</span>
-              <span class="tl__r ${s.arrived ? 'is-yes' : 'is-no'}">${s.arrived ? '鸟来了' : '空岛'}</span>
-              <span class="tl__n">${s.arrived ? `${s.chicks} 只雏鸟` : '—'}</span>
-            </div>`
+            (s) =>
+              `<span class="tn__sq ${s.arrived ? 'is-yes' : 'is-no'}" title="第 ${s.round + 1} 季"></span>`
           )
           .join('')}
       </div>
+    </div>
 
-      <div class="tern__acts">
-        <button class="btn btn--seal" id="tern-again">再守五年</button>
-      </div>
-      <p class="ledger__hint" id="tern-save"></p>
+    <div class="g__row">
+      <p class="g__note">${
+        total > 0
+          ? '它们一年只产一枚卵，孵不成就得再等一年。所以每一只出飞的雏鸟，都算得上一次侥幸。'
+          : '这五季，一只也没飞出来。假鸟在礁石上，站了五年。真实项目里，有的岛试了好几年。'
+      }</p>
+      <button class="g__go g__go--quiet" id="tn-again">再守五年</button>
+    </div>
+
+    <div class="g__row">
+      <p class="g__note" id="tn-save" style="color:var(--ink-300)">
+        象山韭山列岛从 2013 年开始招引，到 2025 年累计孵出 214 只雏鸟，占全球繁殖总量的八成以上。
+      </p>
     </div>
   `;
 
-  panelEl.querySelector('#tern-again')?.addEventListener('click', () => {
+  panelEl.querySelector('#tn-again')?.addEventListener('click', () => {
     S = newGame();
+    animBirds = 0;
     renderPanel();
   });
 
   void saveTernRun();
 }
 
+/* ────────────────────────── 归档 ────────────────────────── */
+
 async function saveTernRun() {
-  const hint = panelEl?.querySelector('#tern-save');
+  const hint = panelEl?.querySelector('#tn-save');
   if (!hint) return;
 
   if (!auth.ready || !auth.online) {
@@ -454,8 +430,8 @@ async function saveTernRun() {
     return;
   }
   if (auth.user.kind !== 'member') {
-    hint.innerHTML = '<button class="ap__link" id="tern-tologin">注册账号</button>，这次的记录就能存下来。';
-    hint.querySelector('#tern-tologin')?.addEventListener('click', () => {
+    hint.innerHTML = '<button class="ap__link" id="tn-tologin">注册账号</button>，这次的记录就能存下来。';
+    hint.querySelector('#tn-tologin')?.addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('auth:need-member'));
     });
     return;
@@ -465,7 +441,6 @@ async function saveTernRun() {
   if (key === lastTernKey) return;
   lastTernKey = key;
 
-  hint.textContent = '正在记录…';
   try {
     const r = await submitTern({ seasons: S.seasons });
     if (r.ok) {

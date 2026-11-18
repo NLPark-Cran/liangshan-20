@@ -17,10 +17,11 @@
 <meta property="og:description" content="手卷、账本、鸟，三个尺度看同一件事。">
 <meta property="og:locale" content="zh_CN">
 
-<link rel="stylesheet" href="css/base.css?v=20261116b">
-<link rel="stylesheet" href="css/scroll.css?v=20261116b">
-<link rel="stylesheet" href="css/extra.css?v=20261116b">
-<link rel="stylesheet" href="css/auth.css?v=20261116b">
+<link rel="stylesheet" href="css/base.css?v=20261118a">
+<link rel="stylesheet" href="css/scroll.css?v=20261118a">
+<link rel="stylesheet" href="css/extra.css?v=20261118a">
+<link rel="stylesheet" href="css/games.css?v=20261118a">
+<link rel="stylesheet" href="css/auth.css?v=20261118a">
 </head>
 <body>
 
@@ -229,9 +230,11 @@
     </button>
   </div>
   <div class="overlay__body">
-    <div class="ledger">
-      <div class="ledger__stage"><canvas id="ledger-canvas"></canvas></div>
-      <div class="ledger__panel" id="ledger-panel"></div>
+    <div class="g" id="lg-root">
+      <div class="g__stage">
+        <canvas id="ledger-canvas"></canvas>
+      </div>
+      <div class="g__bar" id="ledger-panel"></div>
     </div>
   </div>
 </div>
@@ -245,7 +248,13 @@
     </button>
   </div>
   <div class="overlay__body">
-    <div id="bird-panel"></div>
+    <div class="g" id="bd-root">
+      <div class="g__stage" id="bird-stage">
+        <canvas id="bird-canvas"></canvas>
+        <p class="bd__hint" id="bird-hint">移动鼠标，用望远镜扫过去。看见鸟就停一下。</p>
+      </div>
+      <div class="g__bar" id="bird-panel"></div>
+    </div>
   </div>
 </div>
 
@@ -258,9 +267,11 @@
     </button>
   </div>
   <div class="overlay__body">
-    <div class="ledger">
-      <div class="ledger__stage"><canvas id="tern-canvas"></canvas></div>
-      <div class="ledger__panel" id="tern-panel"></div>
+    <div class="g" id="tn-root">
+      <div class="g__stage" id="tern-stage">
+        <canvas id="tern-canvas"></canvas>
+      </div>
+      <div class="g__bar" id="tern-panel"></div>
     </div>
   </div>
 </div>

@@ -1,93 +1,102 @@
 /**
  * ledger.js — 「一亩山的账本」
  *
- * 这不是一个求最优解的游戏。
- * 真实的故事是：一座山先被炸开卖石头，村集体一年进三百多万；
- * 后来矿关了，收入掉到二十几万；再后来，山养回来了，人回来了。
+ * 这一版是重做的。原来的问题是：点「过一年」→ 数字跳一下 → 再点，
+ * 本质上是一张表格，没有可玩的东西，画面上也只有一座不动的山。
  *
- * 游戏要玩家自己扛那个「掉下去」的时刻。
- * 关键设计：关矿是一个不可逆的决定，做了就不能反悔，而且当年现金立刻断崖。
+ * 现在改成：一条 2005-2025 的时间轴，拖到哪里算到哪一年。
+ * 但真正决定命运的是「哪一年关矿」这个不可逆的岔口。
+ * 关得早，钱掉得狠、山回来得快；关得晚，一直在赚钱、但矿挖空了，
+ * 山也挖秃了，修复欠账越滚越大。玩家能看清代价，但回不了头。
  */
 
-import { drawLedgerMountain } from './scenes.js';
+import { drawLedgerPanorama } from './scenes.js';
 import { auth, submitLedger } from './api.js';
 
 /* ────────────────────────── 参数 ────────────────────────── */
 
 const START_YEAR = 2005;
 const END_YEAR = 2025;
+const SPAN = END_YEAR - START_YEAR; // 20
 
-/* 矿山储量。100 单位，每年采 6.2 单位，2021 年前后见底。
-   储量是这个游戏的核心：矿不是取之不尽的，拖得越久越被动。 */
+/* 矿量：100 单位，每年采 5 单位，正好 2025 见底。
+   把「挖得完」变成看得见的事。 */
 const RESERVE_FULL = 100;
-const MINE_RATE = 6.2;
+const MINE_RATE = 5;
 
-const CONFIG = {
+const MODES = {
   mine: {
     name: '开矿',
-    // 收入直接跟剩余储量挂钩，越挖越少，见底后只剩零头
-    income: (state) => {
-      if (state.reserve <= 0) return 6;
-      return Math.round(3.4 * state.reserve);
-    },
-    mountain: -3.2,
-    desc: '石头卖得掉，一年三百多万。山在变秃，矿也在变薄，总有挖完的一天。',
+    short: '开矿',
+    mountain: -4.2,
+    desc: '石头卖得掉，一年三百多万。山在变秃，矿也在变薄。',
   },
   bamboo: {
     name: '种竹',
-    income: (state) => {
-      const t = (state.year - START_YEAR) / 20;
-      return Math.round(18 + t * 42 * (state.mountain / 100));
-    },
-    mountain: 1.4,
-    desc: '短期看不见钱，五六年之后开始有笋、有竹材。山慢慢绿回来。',
+    short: '种竹',
+    mountain: 1.5,
+    desc: '短期看不见钱，五六年之后有笋、有竹材。山慢慢绿回来。',
   },
   eco: {
     name: '做生态',
-    income: (state) => {
-      if (state.mountain < 45) return 6;
-      const t = (state.year - START_YEAR) / 20;
-      return Math.round((state.mountain / 100) * (60 + t * 210));
-    },
-    mountain: 2.2,
+    short: '生态',
+    mountain: 2.4,
     desc: '游客只为好山好水来。山还没养回来之前，这条路一直亏。',
   },
   restore: {
     name: '封山',
-    // 封山期几乎无收入，但山恢复后村里会慢慢找到新的活路
-    income: (state) => {
-      if (state.mountain < 55) return 4;
-      const t = (state.year - START_YEAR) / 20;
-      return Math.round(4 + (state.mountain - 55) * 0.55 + t * 26);
-    },
-    mountain: 3.4,
+    short: '封山',
+    mountain: 3.6,
     desc: '什么都不做，只是让它歇着。最快恢复，也最没有收入。',
   },
 };
+
+/** 当年收入（万元）。收入跟山体健康与剩余矿量都挂钩。 */
+function incomeOf(mode, state) {
+  const t = (state.year - START_YEAR) / SPAN; // 0..1
+  const hp = state.mountain / 100;
+  switch (mode) {
+    case 'mine':
+      if (state.reserve <= 0) return 6;
+      return Math.round(state.reserve * 3.2);
+    case 'bamboo':
+      return Math.round(20 + t * 44 * hp);
+    case 'eco':
+      if (state.mountain < 45) return 7;
+      return Math.round(hp * (58 + t * 205));
+    case 'restore':
+      if (state.mountain < 55) return 4;
+      return Math.round(4 + (state.mountain - 55) * 0.5 + t * 25);
+    default:
+      return 0;
+  }
+}
 
 /* ────────────────────────── 状态 ────────────────────────── */
 
 function newState() {
   return {
+    // 玩家在这一年做出了关矿决定；null 表示还没关
+    closedYear: null,
+    // 玩家在时间轴上设的「今年」，playhead
     year: START_YEAR,
-    cash: 320, // 村集体年收入，万元
-    mountain: 100,
-    reserve: RESERVE_FULL, // 剩余矿石储量
-    mode: 'mine',
-    mineDepth: 0,
-    pledged: false, // 是否已经做出过关矿决定
-    closedMineYear: null,
-    repairDebt: 0, // 关矿时一次性付出的修复欠账
-    rows: [], // 账本明细
-    phase: 'play', // play | decide | over
-    started: false,
+    // 每年选的做法，按年份索引
+    picks: {},
+    // 每年结算出来的账
+    ledger: {},
+    phase: 'play', // play | over
   };
+}
+
+/** 默认做法：还没关矿就开矿，关了之后就封山养着 */
+function defaultPick(state, year) {
+  if (state.closedYear === null) return 'mine';
+  return year < state.closedYear + 3 ? 'restore' : 'eco';
 }
 
 let S = newState();
 let canvasEl = null;
 let panelEl = null;
-let rafId = null;
 let lastSavedKey = '';
 
 /* ────────────────────────── 入口 ────────────────────────── */
@@ -102,10 +111,10 @@ export function openLedger() {
   canvasEl = document.getElementById('ledger-canvas');
   panelEl = document.getElementById('ledger-panel');
   S = newState();
-  S.started = true;
-  lastSavedKey = '';
+  // 先结算到 2005
+  recalc();
   renderPanel();
-  startArtLoop();
+  redraw();
 }
 
 export function closeLedger() {
@@ -113,104 +122,116 @@ export function closeLedger() {
   if (!ov) return;
   ov.classList.remove('is-open');
   document.body.style.overflow = '';
-  if (rafId) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
+  window.removeEventListener('resize', draw);
   setTimeout(() => {
     ov.hidden = true;
   }, 300);
 }
 
-/* ────────────────────────── 绘制 ────────────────────────── */
+/* ────────────────────────── 结算 ────────────────────────── */
 
-function startArtLoop() {
-  if (!canvasEl) return;
-  let last = 0;
-  const draw = (now) => {
-    if (!canvasEl || !canvasEl.isConnected) {
-      rafId = null;
-      return;
+/**
+ * 从 2005 结算到 2025，结果写进 S.ledger。
+ * 每次都全量重算：玩家改了任一年的做法或关矿年份，后面全都会变。
+ */
+function recalc() {
+  S.ledger = {};
+
+  let mountain = 100;
+  let reserve = RESERVE_FULL;
+  let cash = 320;
+
+  for (let y = START_YEAR; y <= END_YEAR; y++) {
+    const mode = S.picks[y] || defaultPick(S, y);
+    const closedNow = S.closedYear === y;
+
+    // 关矿当年的收入断崖：只剩三成多，还要先扣一笔修复欠账
+    if (closedNow) {
+      const debt = Math.round((100 - mountain) * 2.2);
+      cash = Math.max(0, Math.round(cash * 0.35) - debt + 10);
+      S.ledger[y] = {
+        year: y,
+        mode: '关矿',
+        income: cash,
+        mountain: Math.round(mountain),
+        reserve: Math.round(reserve),
+        debt,
+        closedNow: true,
+        cash,
+      };
+      // 关矿当年就转入封山
+      mountain = Math.max(0, Math.min(100, mountain + MODES.restore.mountain));
+      continue;
     }
-    // 30fps 足够，省电
-    if (now - last > 33) {
-      drawLedgerMountain(canvasEl, {
-        mountain: S.mountain,
-        mineDepth: S.mineDepth,
-        mode: S.closedMineYear ? (S.mountain > 70 ? 'eco' : 'restore') : 'mine',
-        seed: 9001,
-      });
-      last = now;
+
+    const income = incomeOf(mode, { year: y, mountain, reserve });
+    cash = Math.max(0, income);
+
+    mountain = Math.max(0, Math.min(100, mountain + MODES[mode].mountain));
+
+    if (mode === 'mine') {
+      reserve = Math.max(0, reserve - MINE_RATE);
     }
-    rafId = requestAnimationFrame(draw);
-  };
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(draw);
+
+    S.ledger[y] = {
+      year: y,
+      mode: MODES[mode].name,
+      income,
+      mountain: Math.round(mountain),
+      reserve: Math.round(reserve),
+      debt: 0,
+      closedNow: false,
+      cash,
+    };
+  }
 }
 
-/* ────────────────────────── 推进一年 ────────────────────────── */
+/* ────────────────────────── 绘制 ────────────────────────── */
 
-function stepYear() {
-  if (S.phase === 'over' || S.year >= END_YEAR) return;
+function draw() {
+  if (!canvasEl || !canvasEl.isConnected) return;
+  const cur = S.ledger[S.year] || S.ledger[START_YEAR];
+  if (!cur) return;
 
-  const cfg = CONFIG[S.mode];
-  const income = cfg.income(S);
+  const closed = S.closedYear !== null && S.year >= S.closedYear;
 
-  // 年份推进
-  S.year += 1;
-
-  // 采矿消耗储量：矿会真的挖完
-  if (S.mode === 'mine' && S.reserve > 0) {
-    S.reserve = Math.max(0, +(S.reserve - MINE_RATE).toFixed(2));
-  }
-
-  // 结算：村集体年收入就是当年的进账，不是累积的存款
-  const delta = income;
-  S.cash = Math.max(0, Math.round(delta * 0.9 + S.cash * 0.1));
-
-  // 山体
-  const mDelta = cfg.mountain;
-  S.mountain = Math.max(0, Math.min(100, S.mountain + mDelta));
-
-  // 采矿会加深矿坑
-  if (S.mode === 'mine') {
-    S.mineDepth = Math.min(1, S.mineDepth + 0.055);
+  /* 矿坑深度不能用「山有多差」反推：
+     2005 年山是满的，但矿已经在挖了，坑该有。
+     按开采年数算：挖一年深一点，关矿之后才往回填。 */
+  let mineDepth;
+  if (closed) {
+    // 关矿后逐年回填
+    const spent = Math.max(0, S.year - S.closedYear);
+    mineDepth = Math.max(0.12, 0.92 - spent * 0.075);
   } else {
-    S.mineDepth = Math.max(0, S.mineDepth - 0.02);
+    const years = S.year - START_YEAR;
+    mineDepth = Math.min(1, 0.1 + years * 0.055);
   }
 
-  S.rows.unshift({
+  drawLedgerPanorama(canvasEl, {
     year: S.year,
-    mode: cfg.name,
-    income: delta,
-    cash: S.cash,
-    mountain: Math.round(S.mountain),
+    health: cur.mountain,
+    mineDepth,
+    reserve: cur.reserve,
+    cash: cur.cash,
+    closed,
+    seed: 9001,
   });
+}
 
-  // 关键节点：2009 年第一次问，此后每 3 年再问一次
-  if (!S.pledged) {
-    const due = S.nextDecide || 2009;
-    if (S.year >= due) {
-      S.phase = 'decide';
-    }
-  }
-
-  if (S.year >= END_YEAR) {
-    S.phase = 'over';
-  }
-
-  renderPanel();
+/** 面板重排后容器尺寸会变，等一帧再画，否则量到的是旧尺寸 */
+function redraw() {
+  requestAnimationFrame(() => {
+    draw();
+    // 布局彻底稳定后再补一次，防止首帧量到塌缩的容器
+    setTimeout(draw, 60);
+  });
 }
 
 /* ────────────────────────── 面板 ────────────────────────── */
 
 function renderPanel() {
   if (!panelEl) return;
-
-  if (S.phase === 'decide') {
-    renderDecision();
-    return;
-  }
   if (S.phase === 'over') {
     renderOver();
     return;
@@ -218,300 +239,276 @@ function renderPanel() {
   renderPlay();
 }
 
+/** 时间轴本体，单独抽出来，两个界面都要用 */
+function trackHTML() {
+  const ticks = [];
+  for (let y = START_YEAR; y <= END_YEAR; y++) {
+    // 只在关键年份写数字：提出理念、矿挖完、玩家关矿那一年
+    const key = y === 2005 || y === 2021 || y === S.closedYear;
+    const label = key || y % 5 === 0 ? String(y).slice(2) : '';
+    ticks.push(`<span class="lg__tick ${key ? 'is-key' : ''}">${label}</span>`);
+  }
+  const pct = ((S.year - START_YEAR) / SPAN) * 100;
+
+  return `
+    <div class="lg__track" id="lg-track" role="slider"
+         aria-label="年份" aria-valuemin="${START_YEAR}" aria-valuemax="${END_YEAR}"
+         aria-valuenow="${S.year}" tabindex="0">
+      <div class="lg__rail"></div>
+      <div class="lg__ticks">${ticks.join('')}</div>
+      <div class="lg__railfill" style="width:${pct}%"></div>
+      <div class="lg__knob" style="left:${pct}%"></div>
+    </div>
+  `;
+}
+
 function renderPlay() {
-  const cfg = CONFIG[S.mode];
+  const cur = S.ledger[S.year];
+  const mode = S.picks[S.year] || (S.year === S.closedYear ? 'mine' : defaultPick(S, S.year));
+  const isCloseYear = S.closedYear === S.year;
+  const canClose = S.closedYear === null && S.year >= 2009;
 
   panelEl.innerHTML = `
-    <div class="ledger__head">
-      <h2 class="ledger__title">一亩山的账本</h2>
-      <p class="ledger__sub">一年一年走，看看这座山最后变成什么样</p>
+    <div class="g__row">
+      <span class="g__lab">年份</span>
+      ${trackHTML()}
+      <span class="g__read"><b id="lg-year">${S.year}</b></span>
     </div>
 
-    <div class="book">
-      <div class="book__year">
-        <b>${S.year}</b>
-        <span>年 · 这一年村里选了「${cfg.name}」</span>
-      </div>
-
-      <div class="book__rows">
-        ${
-          S.rows.length
-            ? S.rows
-                .slice(0, 12)
-                .map(
-                  (r) => `
-              <div class="row">
-                <span class="row__y">${r.year}</span>
-                <span class="row__t">${r.mode}</span>
-                <span class="row__v ${r.income > 60 ? 'is-up' : 'is-down'}">
-                  ${r.income > 0 ? '+' : ''}${r.income} 万
-                </span>
-              </div>`
-                )
-                .join('')
-            : `<p class="dim" style="padding:1rem 0;font-size:0.9rem;color:var(--ink-300)">
-                 账本还没记下第一笔。按下「过一年」开始。
-               </p>`
-        }
+    <div class="g__row">
+      <span class="g__lab">今年做法</span>
+      <div class="g__chips g__chips--even">
+        ${Object.entries(MODES)
+          .filter(([k]) => k !== 'restore' || S.closedYear !== null || S.year >= 2009)
+          .map(
+            ([k, m]) => `
+          <button class="chip ${mode === k && !isCloseYear ? 'is-on' : ''}"
+                  data-mode="${k}"
+                  ${S.closedYear !== null && k === 'mine' ? 'disabled' : ''}>
+            <span class="chip__n">${m.short}</span>
+            <span class="chip__d">${m.desc}</span>
+          </button>`
+          )
+          .join('')}
       </div>
     </div>
 
-    <div class="gauges">
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>村集体年收入</span>
-          <b>${S.cash} 万元</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--cash" style="width:${Math.min(100, (S.cash / 400) * 100)}%"></div>
-        </div>
-      </div>
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>山还剩下多少</span>
-          <b>${Math.round(S.mountain)} %</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--mountain" style="width:${S.mountain}%"></div>
-        </div>
-      </div>
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>矿还剩下多少</span>
-          <b class="${S.reserve <= 0 ? 'is-spent' : ''}">${
-            S.reserve <= 0 ? '挖完了' : Math.round((S.reserve / RESERVE_FULL) * 100) + ' %'
-          }</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--ore" style="width:${
-            Math.max(0, (S.reserve / RESERVE_FULL) * 100)
-          }%"></div>
-        </div>
+    <div class="g__row">
+      <span class="g__lab">账本</span>
+      <div class="g__read">
+        <span>村集体年收入</span><b id="lg-cash">${cur.cash}</b><span>万元</span>
+        <span>·</span>
+        <span>山</span><b id="lg-mtn">${cur.mountain}%</b>
+        <span>·</span>
+        <span>矿</span><b id="lg-ore">${cur.reserve <= 0 ? '空了' : cur.reserve + '%'}</b>
       </div>
     </div>
 
-    <div class="acts">
-      <button class="btn btn--seal" id="lg-next">过一年</button>
-      ${['mine', 'bamboo', 'eco', 'restore']
-        .map(
-          (k) => `
-        <button class="btn btn--ghost ${S.mode === k ? 'is-on' : ''}" data-mode="${k}">
-          ${CONFIG[k].name}
-        </button>`
-        )
-        .join('')}
+    <div class="g__row">
+      ${
+        canClose
+          ? `<button class="g__go" id="lg-close">在这个村，把矿关掉</button>
+             <p class="g__note">关掉就再也开不回来了。收入会掉到十位数，几十个人失业。</p>`
+          : isCloseYear
+            ? `<p class="g__note">${S.year} 年，矿山关了。这一年账上写着一笔修复欠账，${cur.debt} 万。</p>`
+            : S.closedYear !== null
+              ? `<p class="g__note">矿已经在 ${S.closedYear} 年关了。山一年年往回长。</p>`
+              : `<p class="g__note">2009 年起，村民大会开始提关矿这件事。</p>`
+      }
+      <button class="g__go g__go--quiet" id="lg-end">推到 2025，看最后</button>
     </div>
-
-    <p class="ledger__hint">${cfg.desc}</p>
   `;
 
   bindPlay();
 }
 
 function bindPlay() {
-  panelEl.querySelector('#lg-next')?.addEventListener('click', stepYear);
+  // 拖动时间轴
+  const track = panelEl.querySelector('#lg-track');
+  if (track) {
+    const pick = (clientX) => {
+      const r = track.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      const y = Math.round(START_YEAR + t * SPAN);
+      if (y !== S.year) {
+        S.year = y;
+        // 只更新读数与时间轴位置，不重建面板：
+        // 重建会把 track 元素换掉，拖到一半就断了
+        syncTrack(y);
+        syncReadout(y);
+        redraw();
+      }
+    };
 
+    /** 把滑块与进度、年份读数对齐到 y，不动 DOM 结构 */
+    const syncTrack = (y) => {
+      const pct = ((y - START_YEAR) / SPAN) * 100;
+      const knob = track.querySelector('.lg__knob');
+      const fill = track.querySelector('.lg__railfill');
+      if (knob) knob.style.left = `${pct}%`;
+      if (fill) fill.style.width = `${pct}%`;
+      track.setAttribute('aria-valuenow', String(y));
+      const head = panelEl.querySelector('#lg-year');
+      if (head) head.textContent = String(y);
+    };
+
+    /** 账本读数：收入、山、矿 */
+    const syncReadout = (y) => {
+      const cur = S.ledger[y];
+      if (!cur) return;
+      const set = (id, v) => {
+        const el = panelEl.querySelector(`#${id}`);
+        if (el) el.textContent = v;
+      };
+      set('lg-cash', String(cur.cash));
+      set('lg-mtn', `${cur.mountain}%`);
+      set('lg-ore', cur.reserve <= 0 ? '空了' : `${cur.reserve}%`);
+
+      // 这一年的做法高亮
+      const mode = S.picks[y] || (y === S.closedYear ? 'mine' : defaultPick(S, y));
+      panelEl.querySelectorAll('[data-mode]').forEach((b) => {
+        b.classList.toggle('is-on', b.dataset.mode === mode && S.closedYear !== y);
+      });
+    };
+
+    /**
+     * 时间轴只负责「看哪一年」。拖动时轻量同步，松手后重建面板，
+     * 让关矿按钮、提示这些随年份变化的控件都跟上。
+     */
+    let dragging = false;
+    track.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      try {
+        track.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* 拿不到捕获也能拖，只是移出元素后不再跟随 */
+      }
+      pick(e.clientX);
+    });
+    track.addEventListener('pointermove', (e) => {
+      if (dragging) pick(e.clientX);
+    });
+    const stop = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        track.releasePointerCapture(e.pointerId);
+      } catch (_) {
+        /* 没捕获过就没什么可释放的 */
+      }
+      if (typeof e.clientX === 'number' && e.clientX > 0) pick(e.clientX);
+      // 松手后重排一次，把随年份变化的控件（关矿按钮、提示语）刷新
+      renderPanel();
+    };
+    track.addEventListener('pointerup', stop);
+    track.addEventListener('pointercancel', () => {
+      dragging = false;
+    });
+
+    // 键盘也要能走
+    const nudge = (delta) => {
+      const y = Math.max(START_YEAR, Math.min(END_YEAR, S.year + delta));
+      if (y !== S.year) {
+        S.year = y;
+        renderPanel();
+        redraw();
+      }
+    };
+    track.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 5 : 1;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+        nudge(-step);
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+        nudge(step);
+        e.preventDefault();
+      }
+    });
+  }
+
+  // 换做法
   panelEl.querySelectorAll('[data-mode]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const k = btn.dataset.mode;
-      // 已经关过矿，不能回头开矿
-      if (k === 'mine' && S.pledged) return;
-      S.mode = k;
+      if (k === 'mine' && S.closedYear !== null) return;
+      S.picks[S.year] = k;
+      recalc();
       renderPanel();
+      redraw();
     });
   });
-}
 
-function renderDecision() {
-  // 把当前要还的修复欠账算给玩家看
-  const debt = Math.round((100 - S.mountain) * 2.2);
-  const reserveLeft = Math.round((S.reserve / RESERVE_FULL) * 100);
-
-  panelEl.innerHTML = `
-    <div class="ledger__head">
-      <h2 class="ledger__title">${S.year} 年的村民大会</h2>
-      <p class="ledger__sub">桌上摆着两张纸，一张是账本，一张是治理方案</p>
-    </div>
-
-    <div class="book">
-      <div class="book__year">
-        <b>${S.cash}</b>
-        <span>万元 · 这是去年的村集体收入</span>
-      </div>
-      <div class="book__rows">
-        <div class="row">
-          <span class="row__y">矿</span>
-          <span class="row__t">还剩多少</span>
-          <span class="row__v">${reserveLeft}%</span>
-        </div>
-        <div class="row">
-          <span class="row__y">山</span>
-          <span class="row__t">损伤</span>
-          <span class="row__v ${S.mountain < 70 ? 'is-down' : ''}">${Math.round(100 - S.mountain)}%</span>
-        </div>
-        <div class="row">
-          <span class="row__y">治</span>
-          <span class="row__t">现在治要花</span>
-          <span class="row__v is-down">${debt} 万元</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="decision">
-      <p class="decision__t">矿要不要关</p>
-      <p class="decision__d">
-        关掉，收入立刻掉到十位数，几十个人失业。
-        ${
-          reserveLeft > 40
-            ? '但山才动了一点，现在治还治得起。'
-            : '而且山已经挖掉一大半了，治理这笔钱，比早几年贵得多。'
-        }
-      </p>
-      <p class="decision__d">
-        不关，矿还能再撑着。可债是记着的，越往后越贵。
-      </p>
-      <p class="decision__d">
-        这是个不可逆的决定。关了就开不回来了。
-      </p>
-      <div class="decision__acts">
-        <button class="btn btn--seal" id="lg-close">关掉矿山</button>
-        <button class="btn btn--ghost" id="lg-keep">再卖几年</button>
-      </div>
-    </div>
-  `;
-
+  // 关矿
   panelEl.querySelector('#lg-close')?.addEventListener('click', () => {
-    const before = S.cash;
-    /* 修复欠账：山被挖掉多少，就得花多少钱治。
-       这是关矿越晚越吃亏的核心机制：欠账随山体损伤线性增长。 */
-    const debt = Math.round((100 - S.mountain) * 2.2);
-
-    S.pledged = true;
-    S.closedMineYear = S.year;
-    S.repairDebt = debt;
-    S.mode = 'restore';
-    S.cash = Math.max(0, Math.round(before * 0.35) - debt + 10);
-
-    S.rows.unshift({
-      year: S.year,
-      mode: `关矿（修复 ${debt} 万）`,
-      income: S.cash - before,
-      cash: S.cash,
-      mountain: Math.round(S.mountain),
-    });
-    S.phase = 'play';
+    S.closedYear = S.year;
+    // 关矿之后默认封山
+    S.picks[S.year] = 'restore';
+    recalc();
     renderPanel();
+    redraw();
   });
 
-  panelEl.querySelector('#lg-keep')?.addEventListener('click', () => {
-    // 再撑三年才会重新问
-    S.pledged = false;
-    S.mode = 'mine';
-    S.nextDecide = S.year + 3;
-    S.phase = 'play';
+  // 推到结尾
+  panelEl.querySelector('#lg-end')?.addEventListener('click', () => {
+    S.year = END_YEAR;
+    S.phase = 'over';
     renderPanel();
+    redraw();
   });
 }
 
 function renderOver() {
-  const low = Math.min(...S.rows.map((r) => r.income), S.cash);
-  const closed = S.closedMineYear !== null;
-  const spent = S.reserve <= 0;
+  const rows = Object.values(S.ledger).sort((a, b) => a.year - b.year);
+  const closed = S.closedYear;
+  const last = S.ledger[END_YEAR];
+  const lowest = rows.reduce((m, r) => Math.min(m, r.income), Infinity);
 
   panelEl.innerHTML = `
-    <div class="ledger__head">
-      <h2 class="ledger__title">二十年后</h2>
-      <p class="ledger__sub">${S.year} 年 · 账本合上了</p>
-    </div>
-
-    <div class="gauges">
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>村集体年收入</span>
-          <b>${S.cash} 万元</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--cash" style="width:${Math.min(100, (S.cash / 400) * 100)}%"></div>
-        </div>
-      </div>
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>山还剩下多少</span>
-          <b>${Math.round(S.mountain)} %</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--mountain" style="width:${S.mountain}%"></div>
-        </div>
-      </div>
-      <div class="gauge">
-        <div class="gauge__head">
-          <span>矿还剩下多少</span>
-          <b class="${spent ? 'is-spent' : ''}">${
-            spent ? '挖完了' : Math.round((S.reserve / RESERVE_FULL) * 100) + ' %'
-          }</b>
-        </div>
-        <div class="gauge__track">
-          <div class="gauge__fill gauge__fill--ore" style="width:${
-            Math.max(0, (S.reserve / RESERVE_FULL) * 100)
-          }%"></div>
-        </div>
+    <div class="g__row">
+      <span class="g__lab">二十年</span>
+      <div class="g__read">
+        <span>${closed ? `${closed} 年关的矿` : '一直没关矿'}</span>
+        <span>·</span>
+        <span>最难看的一年</span><b>${lowest}</b><span>万元</span>
+        <span>·</span>
+        <span>2025 年的山</span><b>${last.mountain}%</b>
+        <span>·</span>
+        <span>2025 年的收入</span><b>${last.cash}</b><span>万元</span>
       </div>
     </div>
 
-    <div class="verdict">
-      <p class="verdict__t">
-        ${
-          closed
-            ? S.mountain > 85
-              ? '山养回来了'
-              : S.mountain > 60
-                ? '山还在缓'
-                : '山刚缓过一口气'
-            : spent
-              ? '石头卖完了，山也秃了'
-              : '矿还没挖完'
-        }
-      </p>
-      <p>
-        ${
-          closed
-            ? `你在 ${S.closedMineYear} 年把矿关了，光是把山治回能看的样子，就先掏了 ${S.repairDebt} 万。
-               那一年账上最难看的数字是 ${low} 万。到这一年，山还剩 ${Math.round(S.mountain)}%，
-               村集体年收入 ${S.cash} 万。`
-            : `你一直没关矿。${
-                spent ? '矿在 2021 年前后挖完了，' : '矿到现在也没剩多少了，'
-              }山只剩 ${Math.round(S.mountain)}%，村集体年收入 ${S.cash} 万。
-               挖出来的坑要修复，这笔钱村里还没算过。`
-        }
-      </p>
-      <p class="dim" style="margin-top:0.8rem;font-size:0.84rem;color:var(--ink-300)">
-        ${
-          closed
-            ? `那年要是再拖六年，光治理这一项就要多花 ${Math.round(
-                (100 - Math.max(0, S.mountain - 6 * 3.4)) * 2.2 - S.repairDebt
-              )} 万。`
-            : '早关一年，要治的山就少一分。'
-        }
-        这是推演，不是真实数据。真实的账比这复杂得多，也慢得多。
-      </p>
+    <div class="g__row">
+      <span class="g__lab">回看</span>
+      ${trackHTML()}
     </div>
 
-    <div class="acts">
-      <button class="btn btn--seal" id="lg-again">再来一次</button>
+    <div class="g__row">
+      <p class="g__note" id="lg-save">${
+        closed
+          ? `山是能养回来的，但要花二十年，还要先掏一笔 ${rows.find((r) => r.closedNow)?.debt ?? 0} 万的修复钱。真实的事比这慢得多。`
+          : '矿挖完了，山也秃了。挖出来的坑要修复，这笔钱村里还没算过。'
+      }</p>
+      <button class="g__go g__go--quiet" id="lg-again">再来一次</button>
     </div>
-    <p class="ledger__hint" id="lg-save"></p>
   `;
+
+  // 结算页时间轴只用来回看，不切状态
+  const track = panelEl.querySelector('#lg-track');
+  if (track) {
+    track.style.pointerEvents = 'none';
+  }
 
   panelEl.querySelector('#lg-again')?.addEventListener('click', () => {
     S = newState();
-    S.started = true;
-    lastSavedKey = '';
+    recalc();
     renderPanel();
+    redraw();
   });
 
-  // 每局结束提交一次，记录最好成绩；失败不影响继续玩
   void saveRun();
 }
+
+/* ────────────────────────── 归档 ────────────────────────── */
 
 async function saveRun() {
   const hint = panelEl?.querySelector('#lg-save');
@@ -533,19 +530,17 @@ async function saveRun() {
     return;
   }
 
-  // 同一局只提交一次
-  const key = `${S.year}:${S.cash}:${Math.round(S.mountain)}:${S.closedMineYear ?? 'x'}`;
+  const key = `${S.closedYear}:${S.ledger[END_YEAR]?.cash}:${S.ledger[END_YEAR]?.mountain}`;
   if (key === lastSavedKey) return;
   lastSavedKey = key;
 
-  hint.textContent = '正在记录…';
   try {
     const r = await submitLedger({
-      closedYear: S.closedMineYear,
-      finalYear: S.year,
-      finalCash: S.cash,
-      finalMountain: Math.round(S.mountain),
-      years: S.rows.map((x) => ({
+      closedYear: S.closedYear,
+      finalYear: END_YEAR,
+      finalCash: S.ledger[END_YEAR].cash,
+      finalMountain: S.ledger[END_YEAR].mountain,
+      years: Object.values(S.ledger).map((x) => ({
         year: x.year,
         mode: x.mode,
         income: x.income,

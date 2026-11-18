@@ -14,7 +14,7 @@
  * 横向按实际宽高比推算，屏幕多大都保持同样的比例关系。
  */
 
-import { inkStroke, rockCluster, pit, mulberry32, hexA } from './brush.js';
+import { inkStroke, rockCluster, pit, mulberry32, hexA, mistBand, house, seal } from './brush.js';
 import {
   mass,
   ridge,
@@ -2722,4 +2722,255 @@ export function drawLedgerMountain(canvas, s = {}) {
   ctx.restore();
 
   ctx.restore();
+}
+
+/* ══════════════════════════════════════════════════════════
+   账本全景：一亩山从 2005 到 2025
+
+   和上面那个小尺寸的 drawLedgerMountain 不同，这一幅是全幅的，
+   而且要把「累积的痕迹」画出来：矿坑随开采年份变深变宽，
+   村舍随收入增减，树随山体恢复长回来。
+   ══════════════════════════════════════════════════════════ */
+
+/**
+ * @param {object} s
+ *   year, health 0-100, mineDepth 0-1, reserve 0-100,
+ *   cash 当年村集体收入（万元）, closed 是否已关矿
+ */
+export function drawLedgerPanorama(canvas, s = {}) {
+  if (!canvas || !canvas.isConnected) return;
+
+  const {
+    year = 2005,
+    health = 100,
+    mineDepth = 0,
+    cash = 320,
+    closed = false,
+    seed = 9001,
+  } = s;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const rect = canvas.getBoundingClientRect();
+  const W = Math.max(rect.width, 320);
+  const H = Math.max(rect.height, 260);
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const rnd = mulberry32(seed);
+  const hp = Math.max(0, Math.min(100, health)) / 100;
+  const soot = Math.min(1, mineDepth * (1 - hp * 0.5));
+
+  // 天空：从浑浊到清透
+  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.62);
+  sky.addColorStop(0, hexA(blend('#d8cdb2', '#dfe9e4', hp), 0.9));
+  sky.addColorStop(1, hexA('#f4efe4', 0));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H * 0.66);
+
+  // 粉尘云：开采期才有
+  if (soot > 0.12) {
+    for (let i = 0; i < 3; i++) {
+      mistBand(
+        ctx,
+        { x: W * (0.06 + i * 0.3), y: H * (0.1 + rnd() * 0.14), w: W * 0.34, h: H * 0.16 },
+        { color: '#b8a271', alpha: 0.3 * soot, seed: seed + 7 + i * 13, bands: 2 }
+      );
+    }
+  }
+
+  // 远山
+  {
+    const far = ridge(W, H * 0.42, H * 0.065, seed + 3, 3, 120);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(far[0][0], far[0][1]);
+    for (let i = 1; i < far.length; i++) ctx.lineTo(far[i][0], far[i][1]);
+    ctx.lineTo(W, H * 0.7);
+    ctx.lineTo(0, H * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = hexA('#8b9484', 0.1 + hp * 0.06);
+    ctx.fill();
+    ctx.restore();
+    inkStroke(ctx, far, {
+      color: '#7b8478',
+      width: 1.1,
+      alpha: 0.22,
+      seed: seed + 5,
+      wobble: 0.8,
+      dry: 0.3,
+      layers: 1,
+      taper: false,
+    });
+  }
+
+  // 主山
+  const topY = H * 0.46;
+  const amp = H * 0.2;
+  const pts = ridge(W, topY, amp, seed + 11, 2.2, 110);
+
+  // 山体的伤：开采最狠的地方整块塌下去
+  const broken = pts.map(([x, y], i) => {
+    const t = i / (pts.length - 1);
+    if (t > 0.24 && t < 0.56) {
+      const dip = Math.sin(((t - 0.24) / 0.32) * Math.PI) * amp * 1.15 * mineDepth;
+      return [x, y + dip + (rnd() - 0.5) * amp * 0.12 * mineDepth];
+    }
+    return [x, y];
+  });
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(broken[0][0], broken[0][1]);
+  for (let i = 1; i < broken.length; i++) ctx.lineTo(broken[i][0], broken[i][1]);
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, topY - amp, 0, H);
+  const tone = hp > 0.5 ? '#7c9160' : '#b1813f';
+  g.addColorStop(0, hexA(tone, 0.08 + hp * 0.16));
+  g.addColorStop(0.55, hexA(tone, 0.05 + hp * 0.1));
+  g.addColorStop(1, hexA(tone, 0.02 + hp * 0.04));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.restore();
+
+  inkStroke(ctx, broken, {
+    color: hp > 0.5 ? '#2b2f2b' : '#5c4526',
+    width: 2.1,
+    alpha: 0.5 + hp * 0.1,
+    seed: seed + 13,
+    wobble: 1,
+    dry: 0.12,
+    layers: 2,
+    taper: false,
+  });
+
+  // 矿坑：随深度变宽变深，位置在山腰
+  if (mineDepth > 0.03) {
+    pit(ctx, W * 0.34, H * 0.665, {
+      r: W * (0.075 + mineDepth * 0.1),
+      depth: Math.min(1, mineDepth),
+      seed: seed + 21,
+      alpha: 0.5 + mineDepth * 0.22,
+      color: '#8a6733',
+    });
+    for (let i = 0; i < Math.round(mineDepth * 7); i++) {
+      rockCluster(ctx, W * (0.24 + rnd() * 0.28), H * (0.72 + rnd() * 0.06), {
+        seed: seed + 300 + i * 23,
+        size: 6 + rnd() * 12,
+        alpha: 0.3,
+        color: '#7a5a2c',
+      });
+    }
+  }
+
+  haze(ctx, W, H * 0.74, { alpha: 0.6 - mineDepth * 0.2, seed: seed + 31, height: H * 0.055 });
+
+  // 树：健康才长得回来
+  const treeCount = Math.round(hp * 11);
+  for (let i = 0; i < treeCount; i++) {
+    const x = W * (0.52 + (i / Math.max(treeCount, 1)) * 0.45 + rnd() * 0.025);
+    const y = H * (0.79 + rnd() * 0.06);
+    treeShape(ctx, x, y, {
+      size: 26 + rnd() * 30,
+      seed: seed + 100 + i * 17,
+      color: '#2f3a29',
+      alpha: 0.22 + hp * 0.4,
+      canopy: '#3f4a38',
+      canopyAlpha: 0.09 + hp * 0.13,
+      shape: i % 3 === 0 ? 'pine' : 'round',
+    });
+  }
+
+  // 村舍：收入越高房子越多。这是「账本」落到具体人家的地方
+  // 2005 年起点收入 320 万，是当年安吉的首富村，房子该是成片的
+  const houses = Math.max(3, Math.min(16, Math.round((cash / 320) * 11)));
+  for (let i = 0; i < houses; i++) {
+    const col = i % 6;
+    const row = Math.floor(i / 6);
+    const hx = W * (0.045 + col * 0.058 + rnd() * 0.012);
+    const hy = H * (0.845 + row * 0.048 + rnd() * 0.008);
+    house(ctx, hx, hy, {
+      size: 16 + rnd() * 6,
+      color: closed ? '#3a3f38' : '#4a4034',
+      alpha: 0.44 + hp * 0.18,
+      seed: seed + 500 + i * 11,
+      flip: rnd() > 0.5,
+    });
+  }
+
+  // 田：村子周围总有地，几道横向的垄
+  for (let i = 0; i < 5; i++) {
+    const y = H * (0.9 + i * 0.02);
+    inkStroke(
+      ctx,
+      [
+        [W * 0.03, y],
+        [W * 0.2, y + (rnd() - 0.5) * 2],
+        [W * 0.33, y],
+      ],
+      {
+        color: hp > 0.5 ? '#7c9160' : '#a08a5c',
+        width: 1,
+        alpha: 0.2,
+        seed: seed + 720 + i * 7,
+        wobble: 0.5,
+        dry: 0.3,
+        layers: 1,
+        taper: false,
+      }
+    );
+  }
+
+  water(ctx, 0, H * 0.93, H * 0.995, {
+    seed: seed + 41,
+    rows: 3,
+    alpha: 0.1 + hp * 0.14,
+  });
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(90,98,91,0.55)';
+  ctx.font = '12px "Kaiti SC", KaiTi, 楷体, serif';
+  ctx.textAlign = 'left';
+  const label = closed
+    ? hp > 0.72
+      ? '山养回来了'
+      : hp > 0.42
+        ? '还在缓'
+        : '刚停下'
+    : mineDepth > 0.5
+      ? '山一直在被挖'
+      : '还没动';
+  ctx.fillText(label, 22, 30);
+  ctx.restore();
+
+  seal(ctx, W - 40, H - 38, {
+    size: 38,
+    text: year >= 2025 ? '合' : '账',
+    color: '#9d3a30',
+    alpha: 0.22,
+    seed: 9001,
+    rotate: -0.05,
+  });
+}
+
+/** 两个十六进制色按 t 混合 */
+function blend(a, b, t) {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ra = (pa >> 16) & 255;
+  const ga = (pa >> 8) & 255;
+  const ba = pa & 255;
+  const rb = (pb >> 16) & 255;
+  const gb = (pb >> 8) & 255;
+  const bb = pb & 255;
+  const k = Math.max(0, Math.min(1, t));
+  const to = (v) => Math.round(v).toString(16).padStart(2, '0');
+  return `#${to(ra + (rb - ra) * k)}${to(ga + (gb - ga) * k)}${to(ba + (bb - ba) * k)}`;
 }

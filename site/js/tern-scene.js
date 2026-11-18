@@ -1,131 +1,172 @@
 /**
- * scenes.js —— 追加：燕鸥海岛的动态场景
+ * tern-scene.js — 燕鸥招引的海岛全景
  *
- * 这一部分服务于 tern.js 的小游戏：
- * 岛的样子、假鸟的数量、真鸟来的多少，都会实时改变画面。
+ * 重做后这幅画要撑满整个展台：
+ *   岛在画面中央偏左，海铺满下方，天占上半。
+ *   假鸟真的站在岛顶（数量跟档位对应）；
+ *   真鸟来了就从天上落下来，落在岛上，一圈一圈地盘。
+ *   放声音用一圈一圈扩散的波纹表示，从岛向外走。
  */
 
-import {
-  inkStroke,
-  rockCluster,
-  waterLines,
-  hexA,
-  mulberry32,
-  mistBand,
-  seal,
-} from './brush.js';
+import { inkStroke, hexA, mulberry32, mistBand, seal } from './brush.js';
+import { water } from './inkfig.js';
+
+/** 岛的轮廓，按 id 给出不同形状 */
+function islandShape(id, w, h) {
+  const seaY = h * 0.63;
+  if (id === 'reef') {
+    // 海蚀礁岩：顶平肩圆，像被浪啃过的石头
+    return {
+      seaY,
+      pts: reefOutline(w, h, seaY),
+      top: { x: w * 0.46, y: h * 0.362, span: w * 0.24 },
+    };
+  }
+  if (id === 'sandbar') {
+    return {
+      seaY,
+      pts: [
+        [w * 0.13, seaY + 12],
+        [w * 0.22, seaY + 2],
+        [w * 0.34, seaY - 5],
+        [w * 0.47, seaY - 8],
+        [w * 0.6, seaY - 5],
+        [w * 0.72, seaY + 1],
+        [w * 0.84, seaY + 12],
+      ],
+      top: { x: w * 0.47, y: seaY - 6, span: w * 0.2 },
+    };
+  }
+  // 鱼塘埂：极窄的一条，两侧都是水
+  return {
+    seaY,
+    pts: [
+      [w * 0.1, seaY + 20],
+      [w * 0.28, seaY + 10],
+      [w * 0.46, seaY + 7],
+      [w * 0.64, seaY + 8],
+      [w * 0.8, seaY + 4],
+      [w * 0.9, seaY + 20],
+    ],
+    top: { x: w * 0.45, y: seaY + 4, span: w * 0.22 },
+  };
+}
 
 /**
- * 画燕鸥招引岛的场景。每帧调用，所以要保持轻量。
- * @param {HTMLCanvasElement} canvas
  * @param {object} s
- *   island   岛屿 id（'reef' | 'sandbar' | 'pond' | null）
- *   decoy    假鸟档位 id
- *   birds    真鸟数量
- *   nests    巢数
- *   phase    当前阶段
- *   t        时间（秒），用于动画
+ *   island  'reef'|'sandbar'|'pond'|null
+ *   decoy   档位 id
+ *   sound   档位 id
+ *   birds   本季到岛的真鸟数
+ *   nests   筑巢
+ *   phase   choose | waiting | result | end
+ *   round   第几季 0-4
+ *   t       秒
  */
-export function drawTernIsland(canvas, s = {}) {
+export function drawTernPanorama(canvas, s = {}) {
   if (!canvas || !canvas.isConnected) return;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const rect = canvas.getBoundingClientRect();
-  const w = Math.max(rect.width, 300);
-  const h = Math.max(rect.height, 220);
-
-  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+  const W = Math.max(rect.width, 320);
+  const H = Math.max(rect.height, 260);
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
   }
 
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  ctx.clearRect(0, 0, W, H);
 
-  const { island = null, decoy = null, birds = 0, nests = 0, phase = 'choose', t = 0 } = s;
+  const {
+    island = null,
+    decoy = null,
+    sound = null,
+    birds = 0,
+    nests = 0,
+    phase = 'choose',
+    round = 0,
+    t = 0,
+  } = s;
 
-  // 天色：随阶段与时间流动
-  const skyH = h * 0.58;
-  const sky = ctx.createLinearGradient(0, 0, 0, skyH);
-  if (phase === 'result' && birds > 0) {
-    sky.addColorStop(0, '#e8eee9');
-    sky.addColorStop(1, '#f4efe4');
-  } else {
-    sky.addColorStop(0, '#e4e2d8');
-    sky.addColorStop(1, '#f4efe4');
-  }
+  const rnd = mulberry32(4401);
+
+  // ── 天色：随繁殖季推移，从春天到盛夏
+  const seasonT = Math.min(1, round / 4);
+  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.66);
+  sky.addColorStop(0, hexA(mix('#e6ecdf', '#e8e4d4', seasonT), 0.92));
+  sky.addColorStop(0.6, hexA('#f0ebdd', 0.5));
+  sky.addColorStop(1, hexA('#f4efe4', 0));
   ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, skyH);
+  ctx.fillRect(0, 0, W, H * 0.68);
 
-  // 云
-  mistBand(ctx, { x: 0, y: 0, w, h: skyH * 0.9 }, { alpha: 0.5, seed: 4401, bands: 3 });
+  // 云：横向长条，压住天际
+  mistBand(ctx, { x: 0, y: H * 0.06, w: W, h: H * 0.2 }, { alpha: 0.5, seed: 4403, bands: 3 });
 
-  // 远岛：海平线上几点淡影，把空间推开
-  {
-    const farRnd = mulberry32(4409);
-    for (let i = 0; i < 2; i++) {
-      const bx = w * (0.08 + farRnd() * 0.84);
-      const bw = w * (0.09 + farRnd() * 0.1);
-      const bh = h * (0.012 + farRnd() * 0.016);
-      inkStroke(
-        ctx,
-        [
-          [bx - bw, h * 0.585],
-          [bx - bw * 0.45, h * 0.585 - bh],
-          [bx + bw * 0.1, h * 0.585 - bh * 0.7],
-          [bx + bw, h * 0.585],
-        ],
-        {
-          color: '#5a625b',
-          width: 1,
-          alpha: 0.24,
-          seed: 4421 + i * 11,
-          wobble: 0.7,
-          dry: 0.2,
-          layers: 1,
-          taper: false,
-        }
-      );
-    }
+  // ── 远岛：海平线上几点淡影，把空间推开
+  for (let i = 0; i < 3; i++) {
+    const bx = W * (0.05 + rnd() * 0.9);
+    const bw = W * (0.06 + rnd() * 0.09);
+    const bh = H * (0.01 + rnd() * 0.014);
+    inkStroke(
+      ctx,
+      [
+        [bx - bw, H * 0.585],
+        [bx - bw * 0.4, H * 0.585 - bh],
+        [bx + bw * 0.12, H * 0.585 - bh * 0.7],
+        [bx + bw, H * 0.585],
+      ],
+      {
+        color: '#5a625b',
+        width: 1,
+        alpha: 0.22,
+        seed: 4421 + i * 11,
+        wobble: 0.7,
+        dry: 0.2,
+        layers: 1,
+        taper: false,
+      }
+    );
   }
 
-  // 海
-  const seaY = h * 0.62;
-  const sea = ctx.createLinearGradient(0, seaY, 0, h);
-  sea.addColorStop(0, hexA('#6d8f8a', 0.24));
-  sea.addColorStop(0.6, hexA('#6d8f8a', 0.14));
-  sea.addColorStop(1, hexA('#6d8f8a', 0.06));
+  // ── 海
+  const seaY = H * 0.62;
+  const sea = ctx.createLinearGradient(0, seaY, 0, H);
+  sea.addColorStop(0, hexA('#6d8f8a', 0.26));
+  sea.addColorStop(0.55, hexA('#6d8f8a', 0.15));
+  sea.addColorStop(1, hexA('#6d8f8a', 0.05));
   ctx.fillStyle = sea;
-  ctx.fillRect(0, seaY, w, h - seaY);
+  ctx.fillRect(0, seaY, W, H - seaY);
 
-  // 海平线一条极淡的横线
-  inkStroke(
-    ctx,
-    [
-      [0, seaY],
-      [w, seaY],
-    ],
-    { color: '#6d8f8a', width: 0.8, alpha: 0.18, seed: 4407, layers: 1, dry: 0.42, taper: false }
-  );
+  // 海平线
+  inkStroke(ctx, [[0, seaY], [W, seaY]], {
+    color: '#6d8f8a',
+    width: 0.9,
+    alpha: 0.2,
+    seed: 4407,
+    layers: 1,
+    dry: 0.42,
+    taper: false,
+  });
 
-  // 波纹：随 t 缓慢移动
-  const rnd = mulberry32(4403);
-  for (let i = 0; i < 14; i++) {
-    const y = seaY + (h - seaY) * ((i + 0.5) / 14);
-    const amp = 1.2 + rnd() * 2.2;
-    const span = w * 0.3;
-    const speed = 6 + rnd() * 8;
-    const offset = ((t * speed) % (w + span * 2)) - span;
+  // 波纹：缓慢右移
+  const wr = mulberry32(4405);
+  for (let i = 0; i < 16; i++) {
+    const y = seaY + (H - seaY) * ((i + 0.5) / 16);
+    const amp = 1.1 + wr() * 2.2;
+    const span = W * 0.26;
+    const speed = 7 + wr() * 9;
+    const off = ((t * speed) % (W + span * 2)) - span;
     const pts = [];
     for (let k = 0; k <= 12; k++) {
       const u = k / 12;
-      pts.push([offset + span * u, y + Math.sin(u * 6.4 + i + t * 0.9) * amp]);
+      pts.push([off + span * u, y + Math.sin(u * 6.4 + i + t * 0.9) * amp]);
     }
     inkStroke(ctx, pts, {
       color: '#6d8f8a',
       width: 0.9,
-      alpha: 0.2 + (1 - i / 14) * 0.1,
+      alpha: 0.16 + (1 - i / 16) * 0.1,
       seed: 5000 + i * 7,
       wobble: 0.4,
       dry: 0.3,
@@ -135,85 +176,48 @@ export function drawTernIsland(canvas, s = {}) {
     });
   }
 
-  // 岛屿
+  // ── 岛
   if (island) {
-    const drawIslandShape = () => {
-      if (island === 'reef') {
-        // 海蚀礁岩：顶部平缓，肩部圆钝，像被浪啃过的石头，不是山峰
-        return [
-          [w * 0.26, seaY + 4],
-          [w * 0.3, h * 0.52],
-          [w * 0.33, h * 0.4],
-          [w * 0.38, h * 0.34],
-          [w * 0.44, h * 0.32],
-          [w * 0.5, h * 0.33],
-          [w * 0.56, h * 0.36],
-          [w * 0.61, h * 0.42],
-          [w * 0.65, h * 0.5],
-          [w * 0.68, h * 0.58],
-          [w * 0.72, seaY + 4],
-        ];
-      }
-      if (island === 'sandbar') {
-        // 低平沙洲：几乎贴着水面
-        return [
-          [w * 0.18, seaY + 10],
-          [w * 0.27, seaY + 1],
-          [w * 0.39, seaY - 3],
-          [w * 0.5, seaY - 5],
-          [w * 0.62, seaY - 3],
-          [w * 0.74, seaY + 2],
-          [w * 0.84, seaY + 10],
-        ];
-      }
-      // 鱼塘埂：极窄的一条，两侧是水
-      return [
-        [w * 0.14, seaY + 16],
-        [w * 0.3, seaY + 8],
-        [w * 0.45, seaY + 6],
-        [w * 0.6, seaY + 7],
-        [w * 0.78, seaY + 4],
-        [w * 0.88, seaY + 16],
-      ];
-    };
+    const sh = islandShape(island, W, H);
 
-    const shape = drawIslandShape();
-
-    // 填色
+    // 岛体填色
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(shape[0][0], shape[0][1]);
-    for (let i = 1; i < shape.length; i++) ctx.lineTo(shape[i][0], shape[i][1]);
+    ctx.moveTo(sh.pts[0][0], sh.pts[0][1]);
+    for (let i = 1; i < sh.pts.length; i++) ctx.lineTo(sh.pts[i][0], sh.pts[i][1]);
     ctx.closePath();
-    ctx.fillStyle = hexA(island === 'reef' ? '#8d948a' : '#b1813f', 0.14);
+    const g = ctx.createLinearGradient(0, H * 0.28, 0, sh.seaY);
+    g.addColorStop(0, hexA(island === 'reef' ? '#8d948a' : '#b1813f', 0.2));
+    g.addColorStop(1, hexA(island === 'reef' ? '#8d948a' : '#b1813f', 0.1));
+    ctx.fillStyle = g;
     ctx.fill();
     ctx.restore();
 
-    inkStroke(ctx, shape, {
+    inkStroke(ctx, sh.pts, {
       color: '#3a3f38',
-      width: 1.8,
-      alpha: 0.55,
+      width: 2,
+      alpha: 0.58,
       seed: 4411,
-      dry: 0.16,
+      dry: 0.14,
       layers: 2,
     });
 
-    // 礁石细节：沿岩壁的横向岩层线
+    // 岩层线
     if (island === 'reef') {
-      for (let i = 0; i < 5; i++) {
-        const y = h * (0.4 + i * 0.045);
-        const halfW = w * (0.09 + i * 0.018);
+      for (let i = 0; i < 6; i++) {
+        const y = H * (0.36 + i * 0.042);
+        const halfW = W * (0.1 + i * 0.016);
         inkStroke(
           ctx,
           [
-            [w * 0.45 - halfW, y],
-            [w * 0.45, y + (i % 2 ? 1.5 : -1.5)],
-            [w * 0.45 + halfW * 0.9, y + 1],
+            [W * 0.44 - halfW, y],
+            [W * 0.44, y + (i % 2 ? 1.6 : -1.6)],
+            [W * 0.44 + halfW * 0.92, y + 1],
           ],
           {
             color: '#5a625b',
             width: 0.9,
-            alpha: 0.26,
+            alpha: 0.22,
             seed: 4413 + i * 7,
             wobble: 0.5,
             dry: 0.3,
@@ -222,96 +226,145 @@ export function drawTernIsland(canvas, s = {}) {
           }
         );
       }
-      // 岩石竖向裂痕
-      inkStroke(
-        ctx,
-        [
-          [w * 0.42, h * 0.35],
-          [w * 0.41, h * 0.46],
-          [w * 0.43, h * 0.56],
-        ],
-        { color: '#5a625b', width: 0.8, alpha: 0.24, seed: 4451, layers: 1, dry: 0.34 }
-      );
     }
 
-    // 假鸟：站在岛的平顶上
-    const decoyCount = decoy === 'few' ? 3 : decoy === 'mid' ? 12 : decoy === 'many' ? 28 : 0;
-    for (let i = 0; i < decoyCount; i++) {
+    // ── 假鸟：站在岛顶，数量对应档位
+    const n = decoy === 'few' ? 3 : decoy === 'mid' ? 12 : decoy === 'many' ? 28 : 0;
+    for (let i = 0; i < n; i++) {
       const r2 = mulberry32(4500 + i * 13);
-      const px = w * 0.34 + r2() * w * 0.34;
-      const py = h * 0.32 + r2() * h * 0.06;
-      drawTernGlyph(ctx, px, py, 0.5, '#8d948a', 0.55);
+      const px = sh.top.x - sh.top.span / 2 + r2() * sh.top.span;
+      const py = sh.top.y - r2() * H * 0.02;
+      glyph(ctx, px, py, 0.62, '#8d948a', 0.72);
     }
 
-    // 真鸟：从天上落到岛上
+    // ── 声音：从岛向外扩散的弧
+    if (sound) {
+      const rings = sound === 'day' ? 2 : sound === 'dusk' ? 4 : 6;
+      const reach = sound === 'day' ? 0.1 : sound === 'dusk' ? 0.19 : 0.28;
+      // 夜晚档位才画，白天档只在近处
+      const cx = sh.top.x;
+      const cy = sh.top.y + H * 0.05;
+      for (let i = 0; i < rings; i++) {
+        const ph = (t * 0.22 + i / rings) % 1;
+        const rr = W * reach * ph;
+        ctx.save();
+        ctx.strokeStyle = hexA('#6d8f8a', 0.3 * (1 - ph));
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, Math.PI * 1.08, Math.PI * 1.92);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // ── 真鸟
     if (birds > 0) {
-      const show = Math.min(birds, 46);
+      const show = Math.min(birds, 40);
       for (let i = 0; i < show; i++) {
         const r3 = mulberry32(4700 + i * 17);
-        // 前几只落在岛上，其余在空中盘旋
-        const onGround = i < Math.min(nests, show);
+        const grounded = i < Math.min(nests, show);
         let px;
         let py;
-        if (onGround) {
-          px = w * 0.34 + r3() * w * 0.34;
-          py = h * 0.32 + r3() * h * 0.07;
+        if (grounded) {
+          // 落在岛上
+          px = sh.top.x - sh.top.span / 2 + r3() * sh.top.span;
+          py = sh.top.y - r3() * H * 0.03;
         } else {
-          const ang = r3() * Math.PI * 2 + t * 0.28;
-          const rad = w * (0.16 + r3() * 0.24);
-          px = w * 0.46 + Math.cos(ang) * rad;
-          py = h * 0.26 + Math.sin(ang) * rad * 0.42;
+          // 在天上盘旋，越靠上越远
+          const ang = r3() * Math.PI * 2 + t * 0.34;
+          const rad = W * (0.12 + r3() * 0.26);
+          px = sh.top.x + Math.cos(ang) * rad;
+          py = sh.top.y - H * 0.14 + Math.sin(ang) * rad * 0.4;
         }
-        drawTernGlyph(ctx, px, py, 0.72 + r3() * 0.34, '#3a3f38', 0.5 + r3() * 0.4);
+        glyph(ctx, px, py, 0.74 + r3() * 0.3, '#3a3f38', 0.52 + r3() * 0.34);
       }
     }
   }
 
-  // 空岛时期：文字提示
+  // 还没选岛
   if (!island) {
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.32;
     ctx.fillStyle = '#5a625b';
-    ctx.font = '13px "Kaiti SC", KaiTi, 楷体, serif';
+    ctx.font = '14px "Kaiti SC", KaiTi, 楷体, serif';
     ctx.textAlign = 'center';
-    ctx.fillText('选一座岛，把假鸟摆上去', w / 2, h * 0.22);
+    ctx.fillText('先选一座岛', W / 2, H * 0.2);
     ctx.restore();
   }
 
   // 角章
-  seal(ctx, w - 30, h - 30, {
-    size: 34,
+  seal(ctx, W - 46, H - 44, {
+    size: 42,
     text: '守',
     color: '#9d3a30',
-    alpha: 0.34,
+    alpha: 0.26,
     seed: 4801,
     rotate: -0.05,
   });
 }
 
-/**
- * 一只燕鸥的简笔：两条弧线做翅膀，一个小三角做身体
- * @param {number} scale 相对大小
- */
-export function drawTernGlyph(ctx, x, y, scale = 1, color = '#3a3f38', alpha = 0.7) {
+/** 一只燕鸥：两段弧做翅膀，一点做身体 */
+export function glyph(ctx, x, y, scale = 1, color = '#3a3f38', alpha = 0.7) {
   const s = 7 * scale;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(0.7, 1.15 * scale);
   ctx.lineCap = 'round';
-
-  // 翅膀：两段弧
+  ctx.lineWidth = Math.max(0.7, 1.2 * scale);
   ctx.beginPath();
   ctx.moveTo(x - s * 1.5, y + s * 0.24);
   ctx.quadraticCurveTo(x - s * 0.6, y - s * 0.5, x, y);
   ctx.quadraticCurveTo(x + s * 0.6, y - s * 0.5, x + s * 1.5, y + s * 0.24);
   ctx.stroke();
-
-  // 身体：一个短竖
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(x, y + s * 0.8);
   ctx.stroke();
-
   ctx.restore();
+}
+
+/** 两个十六进制色按 t 混合 */
+function mix(a, b, t) {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const ra = (pa >> 16) & 255;
+  const ga = (pa >> 8) & 255;
+  const ba = pa & 255;
+  const rb = (pb >> 16) & 255;
+  const gb = (pb >> 8) & 255;
+  const bb = pb & 255;
+  const k = Math.max(0, Math.min(1, t));
+  const to = (v) => Math.round(v).toString(16).padStart(2, '0');
+  return `#${to(ra + (rb - ra) * k)}${to(ga + (gb - ga) * k)}${to(ba + (bb - ba) * k)}`;
+}
+
+/**
+ * 礁岩轮廓：左端进水，右端出水，顶面几乎是平的。
+ * 参数化生成，避免在源码里堆一长串坐标。
+ */
+function reefOutline(w, h, seaY) {
+  const left = w * 0.16;
+  const right = w * 0.75;
+  const topY = h * 0.36;
+  // 左肩、右肩各两个控制点，中间顶面留平
+  const pts = [];
+  pts.push([left, seaY + 6]);
+  pts.push([left + w * 0.012, h * 0.56]);
+  pts.push([left + w * 0.035, h * 0.47]);
+  pts.push([left + w * 0.08, h * 0.415]);
+  pts.push([left + w * 0.145, h * 0.383]);
+  pts.push([left + w * 0.23, h * 0.368]);
+  // 顶面：平直，略微起伏
+  pts.push([left + w * 0.31, topY + h * 0.004]);
+  pts.push([left + w * 0.39, topY]);
+  pts.push([left + w * 0.47, topY + h * 0.002]);
+  pts.push([left + w * 0.55, topY + h * 0.006]);
+  // 右肩脱下
+  pts.push([left + w * 0.63, h * 0.385]);
+  pts.push([left + w * 0.685, h * 0.44]);
+  pts.push([left + w * 0.72, h * 0.512]);
+  pts.push([left + w * 0.745, h * 0.575]);
+  pts.push([left + w * 0.762, h * 0.608]);
+  pts.push([right, seaY + 2]);
+  return pts;
 }
