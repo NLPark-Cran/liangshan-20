@@ -15,11 +15,11 @@ import { water } from './inkfig.js';
 function islandShape(id, w, h) {
   const seaY = h * 0.63;
   if (id === 'reef') {
-    // 海蚀礁岩：顶平肩圆，像被浪啃过的石头
+    // 海蚀礁岩：顶面平而带锯齿，两侧被浪掏空，不能画成圆馒头
     return {
       seaY,
       pts: reefOutline(w, h, seaY),
-      top: { x: w * 0.46, y: h * 0.362, span: w * 0.24 },
+      top: { x: w * 0.47, y: h * 0.375, span: w * 0.26 },
     };
   }
   if (id === 'sandbar') {
@@ -139,23 +139,21 @@ export function drawTernPanorama(canvas, s = {}) {
   ctx.fillStyle = sea;
   ctx.fillRect(0, seaY, W, H - seaY);
 
-  // 岛在水里的倒影：只保留贴近水面的一条，压得很淡，
-  // 整块镜像会把水面变成一块灰影，反而看不出是水。
+  // 岛在水里的倒影：贴着岛的轮廓往下映一小段，压得很淡
   if (island) {
     const sh0 = islandShape(island, W, H);
     ctx.save();
     ctx.beginPath();
-    // 只取水下很窄的一段
-    ctx.rect(0, seaY, W, Math.min(H * 0.13, H - seaY));
+    ctx.rect(0, seaY, W, Math.min(H * 0.085, H - seaY));
     ctx.clip();
-    ctx.globalAlpha = 0.06;
-    ctx.translate(0, seaY * 2);
-    ctx.scale(1, -1);
+    ctx.globalAlpha = 0.055;
     ctx.beginPath();
     ctx.moveTo(sh0.pts[0][0], sh0.pts[0][1]);
     for (let i = 1; i < sh0.pts.length; i++) ctx.lineTo(sh0.pts[i][0], sh0.pts[i][1]);
+    ctx.lineTo(sh0.pts[sh0.pts.length - 1][0], seaY + H * 0.2);
+    ctx.lineTo(sh0.pts[0][0], seaY + H * 0.2);
     ctx.closePath();
-    ctx.fillStyle = '#5a625b';
+    ctx.fillStyle = '#4f574d';
     ctx.fill();
     ctx.restore();
   }
@@ -164,10 +162,10 @@ export function drawTernPanorama(canvas, s = {}) {
   inkStroke(ctx, [[0, seaY], [W, seaY]], {
     color: '#6d8f8a',
     width: 0.9,
-    alpha: 0.2,
+    alpha: 0.16,
     seed: 4407,
-    layers: 1,
-    dry: 0.42,
+    layers: 2,
+    dry: 0.35,
     taper: false,
   });
 
@@ -207,18 +205,33 @@ export function drawTernPanorama(canvas, s = {}) {
     ctx.moveTo(sh.pts[0][0], sh.pts[0][1]);
     for (let i = 1; i < sh.pts.length; i++) ctx.lineTo(sh.pts[i][0], sh.pts[i][1]);
     ctx.closePath();
-    const g = ctx.createLinearGradient(0, H * 0.34, 0, sh.seaY);
+    const g = ctx.createLinearGradient(0, H * 0.33, 0, sh.seaY);
     if (island === 'reef') {
-      g.addColorStop(0, hexA('#a8ab9c', 0.34));
-      g.addColorStop(0.4, hexA('#93998b', 0.2));
-      g.addColorStop(1, hexA('#7a8073', 0.1));
+      g.addColorStop(0, hexA('#9aa094', 0.46));
+      g.addColorStop(0.35, hexA('#8a9082', 0.34));
+      g.addColorStop(0.72, hexA('#6f7568', 0.24));
+      g.addColorStop(1, hexA('#5c6156', 0.16));
     } else {
-      g.addColorStop(0, hexA('#c8ab74', 0.34));
-      g.addColorStop(0.5, hexA('#b99a63', 0.22));
-      g.addColorStop(1, hexA('#a68a58', 0.1));
+      g.addColorStop(0, hexA('#c0a26c', 0.44));
+      g.addColorStop(0.5, hexA('#ae9060', 0.3));
+      g.addColorStop(1, hexA('#8f7650', 0.16));
     }
     ctx.fillStyle = g;
     ctx.fill();
+    ctx.restore();
+
+    /* 岛面的明暗：右半边压深，礁石才有体积 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(sh.pts[0][0], sh.pts[0][1]);
+    for (let i = 1; i < sh.pts.length; i++) ctx.lineTo(sh.pts[i][0], sh.pts[i][1]);
+    ctx.closePath();
+    ctx.clip();
+    const sideG = ctx.createLinearGradient(W * 0.42, 0, W * 0.78, 0);
+    sideG.addColorStop(0, 'rgba(58,63,56,0)');
+    sideG.addColorStop(1, 'rgba(58,63,56,0.16)');
+    ctx.fillStyle = sideG;
+    ctx.fillRect(0, H * 0.3, W, H * 0.4);
     ctx.restore();
 
     /* 轮廓：分三段画，整条一次画完会被飞白打断，看着像断成两截。
@@ -432,32 +445,39 @@ function mix(a, b, t) {
 }
 
 /**
- * 礁岩轮廓：左端进水，右端出水，顶面几乎是平的。
- * 参数化生成，避免在源码里堆一长串坐标。
+ * 礁岩轮廓：左端进水，右端出水，顶面是一排高低不齐的岩齿。
+ * 这样才有礁石的样子，圆滑的钟形曲线一律不行。
  */
 function reefOutline(w, h, seaY) {
-  const left = w * 0.16;
-  const right = w * 0.75;
-  const topY = h * 0.36;
-  // 左肩、右肩各两个控制点，中间顶面留平
+  const left = w * 0.15;
+  const right = w * 0.775;
+  const topY = h * 0.375;
   const pts = [];
-  pts.push([left, seaY + 6]);
-  pts.push([left + w * 0.012, h * 0.56]);
-  pts.push([left + w * 0.035, h * 0.47]);
-  pts.push([left + w * 0.08, h * 0.415]);
-  pts.push([left + w * 0.145, h * 0.383]);
-  pts.push([left + w * 0.23, h * 0.368]);
-  // 顶面：平直，略微起伏
-  pts.push([left + w * 0.31, topY + h * 0.004]);
-  pts.push([left + w * 0.39, topY]);
-  pts.push([left + w * 0.47, topY + h * 0.002]);
-  pts.push([left + w * 0.55, topY + h * 0.006]);
-  // 右肩脱下
-  pts.push([left + w * 0.63, h * 0.385]);
-  pts.push([left + w * 0.685, h * 0.44]);
-  pts.push([left + w * 0.72, h * 0.512]);
-  pts.push([left + w * 0.745, h * 0.575]);
-  pts.push([left + w * 0.762, h * 0.608]);
-  pts.push([right, seaY + 2]);
+
+  // 左侧入水，几段折线爬到顶面
+  pts.push([left, seaY + 4]);
+  pts.push([left + w * 0.018, h * 0.552]);
+  pts.push([left + w * 0.042, h * 0.468]);
+  pts.push([left + w * 0.082, h * 0.414]);
+  pts.push([left + w * 0.14, h * 0.386]);
+
+  // 顶面：一串岩齿，高低错落
+  const teeth = 9;
+  const span = right - left - w * 0.26;
+  for (let i = 0; i <= teeth; i++) {
+    const u = i / teeth;
+    const x = left + w * 0.15 + span * u;
+    // 奇数齿高、偶数齿低，再加一点不对称
+    const dip = i % 2 === 0 ? h * 0.004 : h * 0.018;
+    pts.push([x, topY + dip]);
+  }
+
+  // 右侧下水
+  const rx = left + w * 0.15 + span;
+  pts.push([rx + w * 0.05, h * 0.402]);
+  pts.push([rx + w * 0.086, h * 0.446]);
+  pts.push([rx + w * 0.116, h * 0.508]);
+  pts.push([rx + w * 0.136, h * 0.566]);
+  pts.push([right, seaY + 4]);
   return pts;
 }

@@ -10,7 +10,7 @@
  * 山也挖秃了，修复欠账越滚越大。玩家能看清代价，但回不了头。
  */
 
-import { drawLedgerPanorama } from './scenes.js';
+import { drawLedgerPanorama } from './ledger-panorama.js';
 import { auth, submitLedger } from './api.js';
 
 /* ────────────────────────── 参数 ────────────────────────── */
@@ -200,9 +200,11 @@ function draw() {
      按开采年数算：挖一年深一点，关矿之后才往回填。 */
   let mineDepth;
   if (closed) {
-    // 关矿后逐年回填
+    /* 关矿后逐年回填。真实里这种矿坑不会自己消失，
+       但十几年后植被长起来，从远处基本看不出坑。
+       所以下限压到 0.06，让人能看出「缓过来了」。 */
     const spent = Math.max(0, S.year - S.closedYear);
-    mineDepth = Math.max(0.12, 0.92 - spent * 0.075);
+    mineDepth = Math.max(0.06, 0.92 - spent * 0.11);
   } else {
     const years = S.year - START_YEAR;
     mineDepth = Math.min(1, 0.1 + years * 0.055);
