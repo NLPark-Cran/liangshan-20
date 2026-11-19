@@ -194,11 +194,16 @@ function checkHit(w, h) {
     const key = `${b.s}-${i}`;
     if (found.has(key)) continue;
 
+    /* 判定要和视觉对上：
+       望远镜是一个圆，鸟在圆心附近才算「看清了」。
+       之前给了 R*0.16 的宽容（约 60px），鸟还在视野边缘就记下了，
+       玩家会觉得「我还没对准呢」。
+       现在要求鸟落在圆心半径内，稀有鸟给得稍宽一点（本来就难找）。 */
     const dx = b._x - lens.x;
     const dy = b._y - lens.y;
     const dist = Math.hypot(dx, dy);
-    // 望远镜中心要真的落在鸟身上，不能只是擦到边
-    if (dist < b._r * 0.9 + R * 0.16) {
+    const tol = b.r === 'X' ? R * 0.34 : b.r === 'M' ? R * 0.3 : R * 0.24;
+    if (dist < tol) {
       catchBird(b, i, key);
     }
   }
