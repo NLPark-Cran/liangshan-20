@@ -111,6 +111,9 @@ export function drawLedgerPanorama(canvas, s = {}) {
     cash = 320,
     closed = false,
     seed = 9001,
+    /* 有 3D 主体时，2D 只当远景：天空 + 远山，不画主山和村落，
+       否则两层各有一座山，会打架。 */
+    farOnly = false,
   } = s;
 
   const hp = Math.max(0, Math.min(100, health)) / 100;
@@ -201,6 +204,19 @@ export function drawLedgerPanorama(canvas, s = {}) {
       taper: false,
     });
   });
+
+  /* ── 只画远景时到此为止：主山交给 3D，这里不再画第二座 ── */
+  if (farOnly) {
+    // 山脚留一层薄雾，让 3D 模型的下部能自然地“长”在纸面上
+    haze(ctx, W, H * 0.62, {
+      alpha: 0.34,
+      seed: seed + 71,
+      height: H * 0.07,
+      bands: 3,
+    });
+    paperGrain(ctx, W, H, { alpha: 0.05, seed: seed + 900 });
+    return;
+  }
 
   /* ── 主山 ── */
   const ridge = ridgeProfile({

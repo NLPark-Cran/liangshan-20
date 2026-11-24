@@ -18,13 +18,17 @@
 		}
 	}
 
-	# 静态资源长缓存
-	@static_assets path_regexp \.(css|js|mjs|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|mp3|mp4|webm|wasm)$
-	header @static_assets Cache-Control "public, max-age=604800"
+	# HTML 不缓存，改完立刻生效
+	@html path *.html /
+	header @html Cache-Control "no-cache, must-revalidate"
+
+	# JS 与 CSS 用 ETag 协商，避免模块更新后继续命中一周旧缓存
+	@static_assets path_regexp \.(css|js|mjs|png|jpg|jpeg|gif|webp|avif|svg|ico|woff|woff2|ttf|otf|mp3|mp4|webm|wasm|glb)$
+	header @static_assets Cache-Control "public, max-age=0, must-revalidate"
 
 	# JSON 数据不缓存，避免更新后前端拿到旧数据
 	@json_data path_regexp \.(json)$
-	header @json_data Cache-Control "public, max-age=60, must-revalidate"
+	header @json_data Cache-Control "no-cache, must-revalidate"
 
 	handle {
 		try_files {path} {path}/ /index.html

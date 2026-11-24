@@ -1,0 +1,94 @@
+/* 课程版独有：浦江清溪推演、十站问答与扩展入口。 */
+.hero__playgrid--extended { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hero__quiz { min-height: 44px; padding: .45rem .25rem; font: var(--t-small)/1.5 var(--font-sans); color: var(--ink-500); background: transparent; border: 0; cursor: pointer; }
+.hero__quiz:hover { color: var(--cinnabar); }
+
+/* 清溪推演 */
+.river { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(390px, .7fr); min-height: 0; }
+.river__stage { position: relative; min-height: 460px; overflow: hidden; background: #d6ded5; }
+#river-canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.river__clock { position: absolute; inset: 2rem auto auto 2rem; display: flex; flex-direction: column; gap: .3rem; color: #28372e; }
+.river__clock span { font: .66rem/1.5 var(--font-sans); letter-spacing: .15em; }
+.river__clock strong { font: 400 clamp(3rem, 5vw, 5.4rem)/1 var(--font-serif); font-variant-numeric: tabular-nums; }
+.river__event { position: absolute; top: 2rem; right: 2rem; width: min(310px, 40%); padding: 1.2rem; background: rgba(250,248,239,.85); border-top: 2px solid #9d3a30; opacity: 0; transform: translateY(-8px); transition: opacity .3s, transform .3s; max-height: calc(100% - 12rem); overflow-y: auto; }
+.river__event.is-visible { opacity: 1; transform: none; }
+.river__event strong { display: block; margin-bottom: .5rem; font: 400 1rem/1.5 var(--font-kai); }
+.river__event p { margin: 0; font: .72rem/1.8 var(--font-sans); color: #4f5a52; }
+.river__event small { display: block; margin-top: .6rem; font: .62rem/1.7 var(--font-sans); color: #68766c; }
+.river__resultkicker { display: block; margin-bottom: .7rem; font: .62rem/1.4 var(--font-sans); color: #9d3a30; }
+.river__history { margin: .8rem 0 0; padding: 0; list-style: none; }
+.river__history li { display: grid; grid-template-columns: 2.5rem 1fr auto; gap: .5rem; padding: .28rem 0; border-top: 1px solid rgba(58,63,56,.12); font: .58rem/1.5 var(--font-sans); }
+.river__history i { font-style: normal; color: #68766c; }
+.river__metrics { position: absolute; inset: auto 0 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 1rem 1.5rem; background: rgba(245,242,232,.91); border-top: 1px solid rgba(58,63,56,.12); backdrop-filter: blur(12px); }
+.river__metrics div { display: flex; flex-direction: column; align-items: center; gap: .2rem; border-right: 1px solid rgba(58,63,56,.12); }
+.river__metrics div:last-child { border: 0; }
+.river__metrics span { font: .58rem/1.5 var(--font-sans); letter-spacing: .12em; color: #5b675f; }
+.river__metrics b { font: 400 1.5rem/1.2 var(--font-serif); color: #2d3e33; }
+.river__controls { position: relative; overflow-y: auto; padding: clamp(1.3rem, 3vw, 2.5rem); background: #f4f0e6; }
+.river__controlhead { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1.5rem; }
+.river__controlhead p { margin: 0; font: .75rem/1.6 var(--font-sans); color: var(--ink-500); }
+.river__controlhead > span { flex: none; font: .62rem/1.5 var(--font-sans); color: var(--ink-500); }
+.river__controlhead b { display: block; font: 400 1.2rem/1.4 var(--font-serif); color: var(--ink-900); }
+.river__actions { display: grid; gap: .55rem; }
+.river__actions button { display: grid; grid-template-columns: 1.8rem 1fr; gap: .2rem .65rem; min-height: 44px; padding: .85rem 1rem; text-align: left; border: 1px solid rgba(58,63,56,.16); background: transparent; cursor: pointer; transition: background .2s, border-color .2s; }
+.river__actions button:hover:not(:disabled), .river__actions button.is-on { background: #fffdf5; border-color: #9d3a30; }
+.river__actions button:disabled { opacity: .35; cursor: not-allowed; }
+.river__actions button > span { grid-row: span 2; padding-top: .2rem; font: .57rem/1.5 var(--font-sans); color: #9d3a30; }
+.river__actions strong { font: 400 .93rem/1.5 var(--font-kai); letter-spacing: .04em; color: var(--ink-900); }
+.river__actions small { font: .61rem/1.5 var(--font-sans); color: var(--ink-500); }
+.river__commit { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.3rem; padding-top: 1.3rem; border-top: 1px solid rgba(58,63,56,.16); }
+.river__commit p { margin: 0; font: .68rem/1.7 var(--font-sans); color: var(--ink-500); }
+.river__commit small { font: .6rem/1.6 var(--font-sans); color: #9d3a30; }
+.river__commit .btn { flex: none; padding: .65rem .9rem; font-size: .78rem; }
+.river__timeline { display: grid; grid-template-columns: repeat(8, 1fr); margin-top: 1.5rem; border-top: 1px solid rgba(58,63,56,.18); }
+.river__timeline span { padding-top: .5rem; font: .55rem/1.5 var(--font-sans); color: var(--ink-300); }
+.river__timeline span.is-done { color: #9d3a30; border-top: 2px solid #9d3a30; margin-top: -1px; }
+.river__restart, .quiz__restart { min-height: 44px; border: 0; border-bottom: 1px solid currentColor; background: transparent; color: var(--ink-500); padding: .2rem 0; font: .65rem/1.5 var(--font-sans); cursor: pointer; }
+.river__restart { position: absolute; top: .65rem; right: 1rem; }
+
+/* 十站问答，独立 quiz 命名，与新十地考察隔离。 */
+.quiz { display: grid; place-items: center; padding: clamp(1.2rem, 4vw, 4rem); overflow-y: auto; background: radial-gradient(circle at 20% 0, #f6f2e7, #e4dfd1); }
+.quiz__paper { width: min(820px, 100%); padding: clamp(1.5rem, 5vw, 4.2rem); background: rgba(255,253,245,.78); border: 1px solid rgba(58,63,56,.16); box-shadow: 0 20px 70px rgba(58,63,56,.06); }
+.quiz__top { display: flex; justify-content: space-between; font: .65rem/1.5 var(--font-sans); letter-spacing: .12em; color: var(--ink-500); }
+.quiz__track { height: 1px; margin: .8rem 0 2.8rem; background: rgba(58,63,56,.15); }
+.quiz__progress { display: block; width: 0; height: 1px; background: #9d3a30; transition: width .4s; }
+.quiz__eyebrow { margin: 0 0 .9rem; font: .65rem/1.5 var(--font-sans); letter-spacing: .15em; color: #9d3a30; }
+.quiz__question { min-height: 3em; margin: 0 0 2rem; font: 400 clamp(1.25rem, 2.7vw, 1.9rem)/1.6 var(--font-kai); letter-spacing: .04em; color: var(--ink-900); }
+.quiz__options { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+.quiz__option { display: flex; align-items: center; gap: .85rem; min-height: 4rem; padding: .9rem 1.1rem; text-align: left; border: 1px solid rgba(58,63,56,.17); background: transparent; cursor: pointer; }
+.quiz__option span { flex: none; display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 1px solid rgba(58,63,56,.25); border-radius: 50%; font: .6rem/1 var(--font-sans); }
+.quiz__option b { font: 400 .86rem/1.6 var(--font-sans); color: var(--ink-700); }
+.quiz__option:hover:not(:disabled) { border-color: #9d3a30; background: #fffdf5; }
+.quiz__option.is-right { background: #e2e9df; border-color: #66836a; }
+.quiz__option.is-wrong { background: #efe0d9; border-color: #9d3a30; }
+.quiz__explain { min-height: 4.8rem; margin: 1.6rem 0; font: .76rem/1.85 var(--font-sans); color: var(--ink-500); }
+.quiz__explain strong { margin-right: .7rem; color: var(--ink-900); }
+.quiz__explain small { color: var(--ink-300); }
+.quiz__bottom { display: flex; align-items: center; justify-content: space-between; }
+.quiz__bottom .btn:only-child { margin-left: auto; }
+
+@media (max-width: 900px) {
+  .river { grid-template-columns: 1fr; overflow-y: auto; }
+  .river__stage { min-height: 46vh; }
+  .river__controls { overflow: visible; padding-bottom: 3rem; }
+}
+@media (max-width: 560px) {
+  .hero__playgrid--extended { grid-template-columns: minmax(0, 1fr); }
+  .river__stage { min-height: 420px; }
+  .river__event { top: 1rem; right: 1rem; width: 55%; padding: .85rem; max-height: 230px; }
+  .river__clock { top: 1rem; left: 1rem; }
+  .river__clock strong { font-size: 2.5rem; }
+  .river__metrics { padding: .8rem .4rem; }
+  .river__metrics b { font-size: 1.15rem; }
+  .river__metrics span { font-size: .52rem; }
+  .river__controlhead { padding-right: 3.5rem; }
+  .river__commit { align-items: stretch; flex-direction: column; }
+  .river__commit .btn { justify-content: center; }
+  .quiz { padding: 0; place-items: start; }
+  .quiz__paper { min-height: 100%; padding: 1.5rem 1.2rem; border: 0; }
+  .quiz__options { grid-template-columns: 1fr; }
+  .quiz__question { min-height: auto; margin-bottom: 1.4rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .river__event, .quiz__progress { transition: none; }
+}

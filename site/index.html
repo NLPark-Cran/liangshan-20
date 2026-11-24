@@ -21,7 +21,11 @@
 <link rel="stylesheet" href="css/scroll.css?v=20261118a">
 <link rel="stylesheet" href="css/extra.css?v=20261118a">
 <link rel="stylesheet" href="css/games.css?v=20261118a">
+<link rel="stylesheet" href="css/journey.css?v=20261123a">
+<link rel="stylesheet" href="css/ledger-campaign.css?v=20261123a">
+<link rel="stylesheet" href="css/fieldwork.css?v=20261123a">
 <link rel="stylesheet" href="css/auth.css?v=20261118a">
+<link rel="stylesheet" href="css/course-extras.css?v=20261123a">
 </head>
 <body>
 
@@ -48,34 +52,59 @@
 
   <div class="hero__inner">
     <div class="hero__left">
-      <p class="hero__kicker">课程实践 · 手绘数字地图</p>
-
-      <h1 class="hero__title">
-        两山<br>二十年
-      </h1>
-
-      <p class="hero__sub">一张可以走进去的浙江生态地图</p>
+      <div class="hero__heading">
+        <p class="hero__kicker">课程实践 · 互动式数字长卷</p>
+        <h1 class="hero__title">两山<br><span>二十年</span></h1>
+        <p class="hero__sub">一张可以走进去的浙江生态地图</p>
+      </div>
 
       <p class="hero__lead">
-        <span class="hl">2005 年 8 月 15 日</span>，安吉余村。一座山被关掉了一半，
-        村里的账本从此换了一种算法。<br>
-        二十年后，浙江有十处地方可以拿来回答同一个问题：
+        <span class="hero__leadcontext"><span class="hl">2005 年 8 月 15 日</span>，安吉余村。一座山被关掉了一半，村里的账本从此换了一种算法。<br>二十年后，浙江有十处地方可以拿来回答同一个问题：</span>
         <span class="hl">一座山值多少钱，要算到哪一年为止。</span>
       </p>
 
-      <div class="hero__actions">
-        <a class="btn btn--seal" id="btn-atlas" href="atlas.html">进入 3D 展台</a>
-        <button class="btn btn--ghost" id="btn-enter">展 卷</button>
-        <button class="btn btn--ghost" id="btn-ledger">一亩山的账本</button>
-        <button class="btn btn--ghost" id="btn-birds">观鸟手账</button>
-        <button class="btn btn--ghost" id="btn-tern">等一只鸟回来</button>
-        <button class="btn btn--ghost" id="btn-stats">我的战绩</button>
+      <div class="hero__primary" aria-label="叙事主入口">
+        <button class="btn btn--seal" id="btn-enter" type="button">
+          <span class="btn__main">展卷</span><span class="btn__note">沿河入画</span>
+        </button>
+        <button class="btn btn--journey" id="btn-journey" type="button">
+          <span class="btn__main">十地考察</span><span class="btn__note">十章二十问</span>
+        </button>
       </div>
 
-      <p class="hero__meta">
-        《习近平新时代中国特色社会主义思想概论》课程实践<br>
-        子主题 5 · 赓续伟大长征精神，建成美丽的现代化强国
-      </p>
+      <section class="hero__play" aria-labelledby="hero-play-title">
+        <div class="hero__sectionhead">
+          <h2 id="hero-play-title">互动推演</h2>
+          <p>把理念放进具体的选择里</p>
+        </div>
+        <div class="hero__playgrid hero__playgrid--extended">
+          <button class="hero__playbtn" id="btn-ledger" type="button">
+            <span class="hero__playname">一亩山的账本</span><span class="hero__playdesc">一座山 · 二十年</span>
+          </button>
+          <button class="hero__playbtn" id="btn-river" type="button">
+            <span class="hero__playname">浦江清溪推演</span><span class="hero__playdesc">一条河 · 八年</span>
+          </button>
+          <button class="hero__playbtn" id="btn-birds" type="button">
+            <span class="hero__playname">观鸟手账</span><span class="hero__playdesc">一片湿地 · 四季</span>
+          </button>
+          <button class="hero__playbtn" id="btn-tern" type="button">
+            <span class="hero__playname">等一只鸟回来</span><span class="hero__playdesc">一座岛 · 年复一年</span>
+          </button>
+        </div>
+      </section>
+
+      <div class="hero__work">
+        <span class="hero__worklabel">作品入口</span>
+        <a class="hero__atlas" id="btn-atlas" href="atlas.html">进入 3D 展台 <span aria-hidden="true">↗</span></a>
+      </div>
+
+      <div class="hero__footer">
+        <p class="hero__meta">《习近平新时代中国特色社会主义思想概论》课程实践<br>子主题 5 · 赓续伟大长征精神，建成美丽的现代化强国</p>
+        <div>
+          <button class="hero__quiz" id="btn-quiz" type="button">十站问答</button>
+          <button class="hero__stats" id="btn-stats" type="button">我的战绩 <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
     </div>
 
     <div class="hero__right" aria-hidden="true">
@@ -101,7 +130,7 @@
   <section class="scroll" id="scroll" aria-label="浙江生态长卷">
     <div class="scroll__hintbar" id="hintbar">拖动、滚动或用方向键展卷</div>
 
-    <div class="scroll__viewport" id="scroll-viewport" tabindex="0" role="application"
+    <div class="scroll__viewport" id="scroll-viewport" tabindex="0" role="region" aria-roledescription="互动长卷"
          aria-label="可展卷的浙江生态手绘地图，用左右方向键在十处点位之间移动">
       <div class="scroll__track" id="scroll-track"></div>
     </div>
@@ -182,14 +211,14 @@
           <li>云和梯田：农村信息报《浙江省农业文化遗产保护大事记》2022-07-16；文化和旅游部《关于确定 21 家旅游景区为国家 5A 级旅游景区的公告》2024-02-06；人民网《丽水云和梯田捧回联合国大奖》2025-10-19；湖州市农业农村局全球重要农业文化遗产名录</li>
           <li>新溪桥村：本组实地调研与村级调研反馈表</li>
           <li>西溪湿地：人民网《我国首个国家湿地公园十周岁啦！》2015-02-25；杭州市林业水利局《湿地物语① 西溪湿地》2025；杭州网 2025-05-04；浙江省林业厅 2012-11-29</li>
-          <li>大陈岛：台州市人民政府《大陈岛》2024-09-04；浙江省住房和城乡建设厅《台州市椒江区大陈镇海岛绿能探索零碳美镇》2024-05-24；台州生态环境 2023-12-07；今日椒江 2023-11-27</li>
-          <li>桑基鱼塘：中国青年报·中青在线《浙江湖州桑基鱼塘被认定为全球重要农业文化遗产》2017-11-24；《中国水产》</li>
+          <li>大陈岛：人民日报《人工养贻贝 还能卖碳汇》2025-08-05；台州市人民政府《大陈岛》2024-09-04；浙江省住房和城乡建设厅 2024-05-24；今日椒江 2023-11-27</li>
+          <li>桑基鱼塘：湖州市农业农村局 2025；中国青年报·中青在线 2017-11-24</li>
           <li>滕头村：奉化区政府《美丽生态激活乡村发展动力》2023-06-30；奉化日报 2023-08-15、2025-08-20；中国宁波网 2008-12-15</li>
           <li>浙江省行政边界：公开地理数据（阿里云 DataV）</li>
           <li>领导人引语：核对自《习近平著作选读》第一卷、共产党员网全文、农业农村部转载座谈会通稿</li>
         </ul>
         <p class="src" style="margin-top:1rem">
-          凡未能核实的数字均未写入正文。核实过程见仓库 docs/research/ 目录。
+          核实过程与逐项出处保存在 <code>js/points.js</code> 和 <code>data/journey.js</code>，页内可直接查看。
         </p>
       </div>
 
@@ -233,6 +262,8 @@
     <div class="g" id="lg-root">
       <div class="g__stage">
         <canvas id="ledger-canvas"></canvas>
+        <canvas id="ledger-3d" class="g__layer3d"></canvas>
+        <div class="g__badge" id="ledger-badge" hidden>群核 Lux3D 实时模型</div>
       </div>
       <div class="g__bar" id="ledger-panel"></div>
     </div>
@@ -276,6 +307,63 @@
   </div>
 </div>
 
+<!-- ══════════════ 浦江清溪推演 ══════════════ -->
+<div class="overlay" id="riverlog" role="dialog" aria-modal="true" aria-label="浦江清溪推演" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb">浦江清溪推演 · 教学模型</span>
+    <button class="overlay__close" id="river-close">收起 <span aria-hidden="true">✕</span></button>
+  </div>
+  <div class="overlay__body river">
+    <div class="river__stage">
+      <canvas id="river-canvas" aria-label="随水质、污染和鱼类指标变化的河流示意画面"></canvas>
+      <div class="river__clock"><span class="river__round">第 1 年，共 8 年</span><strong class="river__year">2013</strong></div>
+      <div class="river__event" id="river-event" aria-live="polite"><strong>先把这条河接过来</strong><p>你手上有 120 万元可支配资金和八年时间。模型中的数值仅用于呈现取舍，不代表浦江真实年度统计。</p></div>
+      <div class="river__metrics">
+        <div><span>水质</span><b data-river-value="water">24</b></div>
+        <div><span>污染</span><b data-river-value="pollution">82</b></div>
+        <div><span>民生</span><b data-river-value="livelihood">65</b></div>
+        <div><span>就业</span><b data-river-value="jobs">20</b></div>
+        <div><span>鱼类</span><b data-river-value="fish">12</b></div>
+      </div>
+    </div>
+    <div class="river__controls">
+      <div class="river__controlhead"><p>每年只做一项重点投入。顺序会改变结果。</p><span>剩余资金 <b class="river__treasury">120 万</b></span></div>
+      <div class="river__actions">
+        <button data-river-action="enforce"><span>01</span><strong>整治散乱污作坊</strong><small>14 万 · 截污快，民生先受损</small></button>
+        <button data-river-action="treatment"><span>02</span><strong>集中治污与园区改造</strong><small>22 万 · 成本较高，保留产业接口</small></button>
+        <button data-river-action="habitat"><span>03</span><strong>修复河岸与湿地</strong><small>12 万 · 恢复栖息地，鱼类回来</small></button>
+        <button data-river-action="industry"><span>04</span><strong>扶持文创与乡村旅游</strong><small>17 万 · 水质越好，收益越高</small></button>
+        <button data-river-action="maintenance"><span>05</span><strong>社区巡河与自然休养</strong><small>0 万 · 低成本管护，不会因资金耗尽卡住</small></button>
+      </div>
+      <div class="river__commit">
+        <div><p id="river-selection">先选一项，再执行。今年的选择会影响后面几年。</p><small id="river-preview"></small></div>
+        <button class="btn btn--seal" id="river-commit" disabled>执行这一年的方案</button>
+      </div>
+      <div class="river__timeline" aria-label="八年选择记录"></div>
+      <button class="river__restart" id="river-restart">重新开局</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ 十站问答 ══════════════ -->
+<div class="overlay" id="quizlog" role="dialog" aria-modal="true" aria-label="十站问答" hidden>
+  <div class="overlay__bar">
+    <span class="overlay__crumb">十站问答 · 把看漏的细节捡起来</span>
+    <button class="overlay__close" id="quiz-close">收起 <span aria-hidden="true">✕</span></button>
+  </div>
+  <div class="overlay__body quiz">
+    <div class="quiz__paper">
+      <div class="quiz__top"><span class="quiz__count">第 1 题 / 8</span><span class="quiz__score">0 分</span></div>
+      <div class="quiz__track"><i class="quiz__progress"></i></div>
+      <p class="quiz__eyebrow"></p>
+      <h2 class="quiz__question"></h2>
+      <div class="quiz__options" id="quiz-options"></div>
+      <p class="quiz__explain" aria-live="polite"></p>
+      <div class="quiz__bottom"><button class="quiz__restart" id="quiz-restart" hidden>再抽八题</button><button class="btn btn--seal" id="quiz-next" disabled>下一题</button></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════ 战绩覆盖层 ══════════════ -->
 <div class="overlay" id="statslog" role="dialog" aria-modal="true" aria-label="战绩与排行" hidden>
   <div class="overlay__bar">
@@ -289,6 +377,14 @@
   </div>
 </div>
 
-<script type="module" src="js/app.js?v=20261116b"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/loaders/": "./vendor/three/loaders/"
+  }
+}
+</script>
+<script type="module" src="js/app.js?v=20261123a"></script>
 </body>
 </html>

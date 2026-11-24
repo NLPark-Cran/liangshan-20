@@ -36,6 +36,35 @@
   z-index: 0;
 }
 
+/* 3D 层：铺满舞台，压在 2D 水墨之上形成景深 */
+.g__layer3d {
+  z-index: 1 !important;
+  pointer-events: auto;
+  /* 上缘化开，免得 3D 与水墨之间有一条生硬的接缝 */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 18%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 18%);
+}
+
+/* 右下角的来源标记 */
+.g__badge {
+  position: absolute;
+  inset: auto var(--s4) var(--s4) auto;
+  z-index: 3;
+  padding: 0.18rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-500);
+  background: rgba(255, 253, 245, 0.72);
+  border: 1px solid rgba(195, 198, 189, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.g__badge[hidden] {
+  display: none;
+}
+
 /* 画布上方浮着的读数：年、季、分数 */
 .g__hud {
   position: absolute;
